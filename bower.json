@@ -1,0 +1,16 @@
+{
+    "name": "mondo",
+    "version": "0.0.0",
+    "main": "dist/mondo.js",
+    "license": "MIT",
+    "ignore": [
+        "**/.*",
+        "*.md",
+        "Gruntfile.js",
+        "package.json"
+    ],
+    "dependencies": {
+        "URIjs": "~1.13.2",
+        "nedb": "~0.10.6"
+    }
+}
