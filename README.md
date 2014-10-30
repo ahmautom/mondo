@@ -3,11 +3,6 @@ Mondo
 
 Generic storage provider for browser
 
-Documentation and API
----------------------
-
-[http://doc](http://doc)
-
 Dependencies
 ------------
 
@@ -15,6 +10,8 @@ Mondo has a hard dependency of `jQuery` >= 1.5
 
 Installation
 ------------
+
+### Bower
 
 ```shell
 $ bower install --save mondo
@@ -24,6 +21,8 @@ Simple Usage
 ------------
 
 ```javascript
+var mondo = window.Mondo; // script tag
+var mondo = require('mondo'); // Requirejs
 var db = mondo();
 db.addStore(mondo.stores.rest('/api'));
 db.addStore(mondo.stores.localStorage('myDb'));
@@ -35,10 +34,15 @@ apples.find({price: 899}, function(err, models){
 });
 
 // Promise
-apples.find({price: 899}).then(function(models){
+apples.find({price: 899}).exec().then(function(models){
     // Do something with models
 }, function(err){
     // Error handling
+});
+
+// Building query
+apples.find().where({price: 899}).select({name: 1}).exec(function(err, models){
+    // Do something with models
 });
 ```
 
@@ -61,20 +65,29 @@ Create a collection object which you can pass in an optional Model constructor `
 #### Options
 - queryDefaults
 
+#### Global options
+- lean [Boolean]
+- stores [Array<String>]
+
 ### Mondo#addStore(store)
+
+Add a store layer to Mondo.
 
 Collection
 ----------
 
-Collection provides the following methods which consume the same arguments as the MongoDB driver  
+Collection provides the following methods which consume the same arguments as the [MongoDB driver](//mongodb.github.io/node-mongodb-native/api-generated/collection.html)
 `insert, find, findOne, update, remove, count, distinct, mapReduce`
 
 The follwing methods are also added for convenience.  
 `findById, findByIdAndRemove, findByIdAndUpdate`
 
-### Global options
-- lean [Boolean] 
-- stores [Array<String>]
+#### Return QueryBuilder
+
+QueryBuilder
+------------
+
+### QueryBuilder#
 
 Stores (Adapters)
 -----------------
@@ -102,19 +115,27 @@ var store = mondo.stores.rest([url], [options]);
 
 In order to fully utilize the REST store, your resource server must fullfil the following protocol
 
-|   command  |          HTTP Request        |        Available query parameters       |
-|------------|------------------------------|-----------------------------------------|
-| find       | GET /collection              | selector, fields, skip, limit, sort     |
-| findOne    | GET /collection?op=find_one  | selector, fields, skip, limit, sort     |
-| count      | GET /collection?op=count     | selector, skip, limit                   |
-| distinct   | GET /collection?op=distinct  | key                                     |
-| insert     | POST /collection             | N/A                                     |
-| update     | PATCH /collection            | selector, multi, upsert                 |
-| remove     | DELETE /collection           | selector, single                        |
-| mapReduce  | GET /collection?op=map_reduce| selector, limit, sort, map, reduce      |
-| findById   | GET /collection/id           | fields                                  |
-| removeById | DELETE /collection/id        | N/A                                     |
-| updateById | PATCH /collection/id         | N/A                                     |
+|   command  |            HTTP Request           |        Available query parameters       |
+|------------|-----------------------------------|-----------------------------------------|
+| find       | GET /collection                   | selector, fields, skip, limit, sort     |
+| findOne    | GET /collection?command=find_one  | selector, fields, skip, limit, sort     |
+| count      | GET /collection?command=count     | selector, skip, limit                   |
+| distinct   | GET /collection?command=distinct  | key                                     |
+| insert     | POST /collection                  | N/A                                     |
+| update     | PATCH /collection                 | selector, multi, upsert                 |
+| remove     | DELETE /collection                | selector, single                        |
+| mapReduce  | GET /collection?command=map_reduce| selector, limit, sort, map, reduce      |
+| findById   | GET /collection/id                | fields                                  |
+| removeById | DELETE /collection/id             | N/A                                     |
+| updateById | PATCH /collection/id              | N/A                                     |
+
+### NeDB
+
+Store built on top of [NeDB](//github.com/louischatriot/nedb) (An in-memory storage)
+
+```javascript
+var store = mondo.stores.nedb([options]);
+```
 
 ### IndexedDB
 
@@ -124,15 +145,23 @@ Store built on top of [IDBWrapper](//github.com/jensarps/IDBWrapper)
 var store = mondo.stores.indexedDB([options]);
 ```
 
-### NeDB
-
-Store built on top of [NeDB](//github.com/louischatriot/nedb) (An in-memory storage)
-
 ### LocalStorage
+
+```javascript
+var store = mondo.stores.localStorage([options]);
+```
 
 ### SessionStorage
 
+```javascript
+var store = mondo.stores.sessionStorage([options]);
+```
+
 ### WebSQL
+
+```javascript
+var store = mondo.stores.webSQL([options]);
+```
 
 Building your own store
 -----------------------
@@ -140,28 +169,28 @@ To build your own store, please start by referring to `src/stores/abstract.js`. 
 
 ### Query object
 
-`query` is a simple query builder which stores the information a query.
+`query` is a simple object which describes a query command.
 
 Schema of a Query object
 ```javascript
 {
     collectionName: String
-    op: String // operation
+    command: String
     criteria: Object
     fields: Object/Array
-    doc: Object // applicable when op is insert, update
-    map: Function // applicable when op is mapReduce
-    reduce: Function // applicable when op is mapReduce
+    doc: Object // applicable when command is insert, update
+    map: Function // applicable when command is mapReduce
+    reduce: Function // applicable when command is mapReduce
+    skip: Number
+    limit: Number
+    sort: Object/Array
     options: {
-        skip: Number
-        limit: Number
-        sort: Object/Array
         lean: Boolean
     }
 }
 ```
 
-Currently Mondo supports `insert, find, findOne, update, remove, count, mapReduce, distinct` operation
+Currently Mondo supports `insert, find, findOne, update, remove, count, mapReduce, distinct` command
 
 ### Deferred object
 

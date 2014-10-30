@@ -1,50 +1,71 @@
-(function(global, factory, $, undefined) {
+(function(root, factory) {
     'use strict';
 
-    // Requirejs / Commonjs
     if (typeof define === 'function' && define.amd) {
-        define('mondo', function(require, exports, module) {
-            return factory(require('jquery'));
+        define(['underscore', 'jquery', 'URIjs/URI', 'nedb'], function(_, $, URI, Datastore) {
+            return factory(_, $, URI, Datastore);
         });
+    } else if (typeof exports !== 'undefined') {
+        var _ = require('underscore');
+        var $ = require('jquery')(root);
+        var URI = require('URIjs');
+        var Datastore = require('nedb');
+        module.exports = factory(_, $, URI, Datastore);
+    } else {
+        root.mondo = factory(root._, root.jQuery, root.URI, root.Nedb);
     }
-    // Node.js
-    else if (typeof exports !== 'undefined') {
-        exports.mondo = mondo;
-        if (typeof module !== 'undefined' && module.exports) {
-            module.exports = factory(require('jquery'));
-        }
+
+})(this, function factory(_, $, URI, Datastore) {
+        'use strict';function Collection(mondo, name, options) {
+    if (!(this instanceof Collection)) {
+        return new Collection(mondo, name, options);
     }
-    // Expose to global
-    else {
-        global.mondo = factory($);;
-    }
-})(this, function factory($, undefined) {
-        'use strict';function Collection(mondo, collectionName, Model, options) {
     // TODO: process arguments
 
     this._mondo = mondo;
-    this.collectionName = collectionName;
-    this.Model = Model;
+    this.name = name;
+    this.options = options || {};
 
     // TODO: process options
 }
 
-Collection.prototype.insert = function(docs, options, callback) {
-    if ('function' == typeof options) {
+// Read operations
+
+Collection.prototype.filter = function(selector, fields, options, callback) {
+    if ('function' == typeof selector) {
+        callback = selector;
+        selector = {};
+        fields = undefined;
+        options = undefined;
+    } else if ('function' == typeof fields) {
+        callback = fields;
+        fields = undefined;
+        options = undefined;
+    } else if ('function' == typeof options) {
         callback = options;
         options = undefined;
     }
 
     options = options || {};
 
-    var query = new Query(this.collectionName);
-    query.insert(docs);
+    var qb = new QueryBuilder(this._mondo, this, options);
+    qb.from(this.name).filter(selector);
 
-    var deferred = $.Deferred();
-    this._mondo.handle(query, deferred, this.Model, options);
-    var promise = deferred.promise();
-    handleCallback(promise, callback);
-    return promise;
+    if (fields) {
+        qb.select(fields);
+    }
+
+    utils.forEach(['sort', 'skip', 'limit', 'lean'], function(method) {
+        if (options[method]) {
+            qb[method](options[method]);
+        }
+    });
+
+    if (callback) {
+        qb.exec(callback);
+    }
+
+    return qb;
 };
 
 Collection.prototype.find = function(selector, fields, options, callback) {
@@ -64,33 +85,56 @@ Collection.prototype.find = function(selector, fields, options, callback) {
 
     options = options || {};
 
-    var query = new Query(this.collectionName);
-    query.find().where(selector);
+    var qb = new QueryBuilder(this._mondo, this, options);
+    qb.from(this.name).find(selector);
 
     if (fields) {
-        query.select(fields);
+        qb.select(fields);
     }
 
-    utils.forEach(['sort', 'skip', 'limit', 'lean'], function(method) {
+    utils.forEach(['lean'], function(method) {
         if (options[method]) {
-            query[method](options[method]);
+            qb[method](options[method]);
         }
     });
 
-    var deferred = $.Deferred();
-    this._mondo.handle(query, deferred, this.Model, options);
-    var promise = deferred.promise();
-    handleCallback(promise, callback);
-    return promise;
+    if (callback) {
+        qb.exec(callback);
+    }
+
+    return qb;
 };
 
-Collection.prototype.findOne = function(selector, fields, options, callback) {
+Collection.prototype.count = function(selector, options, callback) {
     if ('function' == typeof selector) {
         callback = selector;
         selector = {};
-        fields = undefined;
         options = undefined;
-    } else if ('function' == typeof fields) {
+    } else if ('function' == typeof options) {
+        callback = options;
+        options = undefined;
+    }
+
+    options = options || {};
+
+    var qb = new QueryBuilder(this._mondo, this, options);
+    qb.from(this.name).count(selector);
+
+    utils.forEach(['skip', 'limit'], function(method) {
+        if (options[method]) {
+            qb[method](options[method]);
+        }
+    });
+
+    if (callback) {
+        qb.exec(callback);
+    }
+
+    return qb;
+};
+
+Collection.prototype.distinct = function(key, fields, options, callback) {
+    if ('function' == typeof fields) {
         callback = fields;
         fields = undefined;
         options = undefined;
@@ -101,24 +145,66 @@ Collection.prototype.findOne = function(selector, fields, options, callback) {
 
     options = options || {};
 
-    var query = new Query(this.collectionName);
-    query.findOne().where(selector);
+    var qb = new QueryBuilder(this._mondo, this, options);
+    qb.from(this.name).distinct(key);
 
     if (fields) {
-        query.select(fields);
+        qb.select(fields);
     }
 
     utils.forEach(['lean'], function(method) {
         if (options[method]) {
-            query[method](options[method]);
+            qb[method](options[method]);
         }
     });
 
-    var deferred = $.Deferred();
-    this._mondo.handle(query, deferred, this.Model, options);
-    var promise = deferred.promise();
-    handleCallback(promise, callback);
-    return promise;
+    if (callback) {
+        qb.exec(callback);
+    }
+
+    return qb;
+};
+
+Collection.prototype.mapReduce = function(map, reduce, options, callback) {
+    if ('function' == typeof options) {
+        callback = options;
+        options = undefined;
+    }
+
+    var qb = new QueryBuilder(this._mondo, this, options);
+    qb.from(this.name).mapReduce(map, reduce);
+
+    utils.forEach(['qb', 'sort', 'limit'], function(method) {
+        if (options[method]) {
+            qb[method](options[method]);
+        }
+    });
+
+    if (callback) {
+        qb.exec(callback);
+    }
+
+    return qb;
+};
+
+// Write operations
+
+Collection.prototype.insert = function(docs, options, callback) {
+    if ('function' == typeof options) {
+        callback = options;
+        options = undefined;
+    }
+
+    options = options || {};
+
+    var qb = new QueryBuilder(this._mondo, this, options);
+    qb.from(this.name).insert(docs);
+
+    if (callback) {
+        qb.exec(callback);
+    }
+
+    return qb;
 };
 
 Collection.prototype.update = function(selector, doc, options, callback) {
@@ -138,20 +224,20 @@ Collection.prototype.update = function(selector, doc, options, callback) {
 
     options = options || {};
 
-    var query = new Query(this.collectionName);
-    query.update(doc).where(selector);
+    var qb = new QueryBuilder(this._mondo, this, options);
+    qb.from(this.name).update(doc).where(selector);
 
     utils.forEach(['upsert', 'multi'], function(method) {
         if (options[method]) {
-            query[method](options[method]);
+            qb[method](options[method]);
         }
     });
 
-    var deferred = $.Deferred();
-    this._mondo.handle(query, deferred, this.Model, options);
-    var promise = deferred.promise();
-    handleCallback(promise, callback);
-    return promise;
+    if (callback) {
+        qb.exec(callback);
+    }
+
+    return qb;
 };
 
 Collection.prototype.remove = function(selector, options, callback) {
@@ -166,107 +252,20 @@ Collection.prototype.remove = function(selector, options, callback) {
 
     options = options || {};
 
-    var query = new Query(this.collectionName);
-    query.remove().where(selector);
+    var qb = new QueryBuilder(this._mondo, this, options);
+    qb.from(this.name).remove(selector);
 
     utils.forEach(['single'], function(method) {
         if (options[method]) {
-            query[method](options[method]);
+            qb[method](options[method]);
         }
     });
 
-    var deferred = $.Deferred();
-    this._mondo.handle(query, deferred, this.Model, options);
-    var promise = deferred.promise();
-    handleCallback(promise, callback);
-    return promise;
-};
-
-Collection.prototype.count = function(selector, options, callback) {
-    if ('function' == typeof selector) {
-        callback = selector;
-        selector = {};
-        options = undefined;
-    } else if ('function' == typeof options) {
-        callback = options;
-        options = undefined;
+    if (callback) {
+        qb.exec(callback);
     }
 
-    options = options || {};
-
-    var query = new Query(this.collectionName);
-    query.count().where(selector);
-
-    utils.forEach(['skip', 'limit'], function(method) {
-        if (options[method]) {
-            query[method](options[method]);
-        }
-    });
-
-    var deferred = $.Deferred();
-    this._mondo.handle(query, deferred, this.Model, options);
-    var promise = deferred.promise();
-    handleCallback(promise, callback);
-    return promise;
-};
-
-Collection.prototype.distinct = function(selector, fields, options, callback) {
-    if ('function' == typeof selector) {
-        callback = selector;
-        selector = {};
-        fields = undefined;
-        options = undefined;
-    } else if ('function' == typeof fields) {
-        callback = fields;
-        fields = undefined;
-        options = undefined;
-    } else if ('function' == typeof options) {
-        callback = options;
-        options = undefined;
-    }
-
-    options = options || {};
-
-    var query = new Query(this.collectionName);
-    query.distinct().where(selector);
-
-    if (fields) {
-        query.select(fields);
-    }
-
-    utils.forEach(['lean'], function(method) {
-        if (options[method]) {
-            query[method](options[method]);
-        }
-    });
-
-    var deferred = $.Deferred();
-    this._mondo.handle(query, deferred, this.Model, options);
-    var promise = deferred.promise();
-    handleCallback(promise, callback);
-    return promise;
-};
-
-Collection.prototype.mapReduce = function(map, reduce, options, callback) {
-    if ('function' == typeof options) {
-        callback = options;
-        options = undefined;
-    }
-
-    var query = new Query(this.collectionName);
-    query.mapReduce(map, reduce);
-
-    utils.forEach(['query', 'sort', 'limit'], function(method) {
-        if (options[method]) {
-            query[method](options[method]);
-        }
-    });
-
-    var deferred = $.Deferred();
-    this._mondo.handle(query, deferred, this.Model, options);
-    var promise = deferred.promise();
-    handleCallback(promise, callback);
-    return promise;
+    return qb;
 };
 
 // Sugar
@@ -288,20 +287,6 @@ Collection.prototype.updateById = function(id, doc, options, callback) {
         _id: id
     }, doc, options, callback);
 };
-
-// Helpers
-
-function handleCallback(promise, callback) {
-    if (callback) {
-        promise.then(function() {
-            callback.apply(null, [null].concat([].slice.call(arguments, 0)));
-        }, function(err) {
-            callback(err);
-        });
-    }
-
-    return promise;
-}
 function Model(doc) {
     this.attributes = doc;
 }
@@ -356,21 +341,20 @@ Model.prototype.remove = function(callback) {
 };
 function Mondo(options) {
     if (!(this instanceof Mondo)) {
-        return new Mondo();
+        return new Mondo(options);
     }
 
-    options = options || {};
 
     this._stores = [];
-    this._onError = options.onError;
+    this.options = options || {};
 }
 
 Mondo.version = '0.0.0';
 Mondo.Model = Model;
 Mondo.Collection = Collection;
-Mondo.Query = Query;
+Mondo.QueryBuilder = QueryBuilder;
 Mondo.stores = {
-    abstract: AbstractStore,
+    _abstract: AbstractStore,
     localStorage: LocalStorageStore,
     sessionStorage: SessionStorageStore,
     nedb: NeDBStore,
@@ -378,27 +362,42 @@ Mondo.stores = {
     webSQL: WebSQLStore
 };
 
-Mondo.prototype.addStore = function(store) {
+Mondo.prototype.use = function(store) {
     this._stores.push(store);
 };
 
-Mondo.prototype.collection = function(name, Model, options) {
-    // process arguments
-    if ('undefined' === typeof Model) {
-        Model = Mondo.Model;
+Mondo.prototype.unuse = function(storeName) {
+    for (var i = 0, l = this._stores.length; i < l; i++) {
+        if (this._stores[i].name === storeName) {
+            this._stores.splice(i, 1);
+            return true;
+        }
     }
-    var collection = new Collection(this, name, Model, options);
+
+    return false;
+};
+
+Mondo.prototype.collection = function(name, options) {
+    // process arguments
+    if ('string' !== typeof name) {
+        options = name;
+    }
+    var collection = new Collection(this, name, options);
+    utils.forEach(this._stores, function(store) {
+        store.initCollection(collection);
+    });
     return collection;
 };
 
-Mondo.prototype.handle = function(query, deferred, Model, options) {
+Mondo.prototype.handle = function(collection, query, deferred, options) {
     var stores;
 
     options = options || {};
 
+    // Select stores
     if (options.stores) {
         stores = utils.filter(this._stores, function(store) {
-            return options.stores.indexOf(store.name) > -1;
+            return utils.indexOf(options.stores, store.name) > -1;
         });
     } else {
         stores = this._stores;
@@ -406,139 +405,136 @@ Mondo.prototype.handle = function(query, deferred, Model, options) {
 
     var self = this;
     var idx = 0;
-    next();
+
+    return next();
 
     function next(err) {
-        if (err && self._onError) {
-            return self._onError(err);
+        if (err && self.options.onError) {
+            return self.options.onError(err);
         }
 
         var store = stores[idx++];
 
         if (!store) {
-            return deferred.resolve(null);
+            return deferred.resolve(null).promise();
         }
 
-        store.handle(query, deferred, Model, next);
+        return store.handle(collection, query, deferred, next);
     }
 };
-function Query(collectionName) {
-    if (!(this instanceof Query)) {
-        return new Query(collectionName);
+function QueryBuilder(mondo, collection, options) {
+    if (!(this instanceof QueryBuilder)) {
+        return new QueryBuilder(mondo, collection, options);
     }
 
-    this.collectionName = collectionName;
-    this.options = {};
-    this.op = undefined;
-    this.selector = {};
-    this.fields = undefined;
-    this.doc = undefined;
-    this.map = undefined;
-    this.reduce = undefined;
+    this._mondo = mondo;
+    this._collection = collection;
+    this._options = options;
+    this._query = {
+        options: {}
+    };
 }
 
-// Basic operations
-
-Query.prototype.insert = function(doc) {
-    this.op = 'insert';
-    this.doc = doc;
-    return this;
+var methodToProperty = {
+    from: 'collectionName',
+    setCommand: 'command',
+    select: 'fields',
+    skip: 'skip',
+    limit: 'limit',
+    sort: 'sort',
+    multi: 'multi',
+    setDoc: 'doc'
 };
 
-Query.prototype.find = function(selector) {
-    this.op = 'find';
-    this.where(selector);
-    return this;
-};
+util.forEach(Object.keys(methodToProperty), function(key) {
+    QueryBuilder.prototype[key] = function(value) {
+        this._query[methodToProperty[key]] = value;
+    };
+});
 
-Query.prototype.findOne = function(selector) {
-    this.op = 'findOne';
-    this.where(selector);
-    return this;
-};
-
-Query.prototype.update = function(doc) {
-    this.op = 'update';
-    this.doc = doc;
-    return this;
-};
-
-Query.prototype.remove = function(selector) {
-    this.op = 'remove';
-    this.where(selector);
-    return this;
-};
-
-Query.prototype.count = function(selector) {
-    this.op = 'count';
-    this.where(selector);
-    return this;
-};
-
-Query.prototype.mapReduce = function(map, reduce) {
-    this.op = 'mapReduce';
-    this.map = map;
-    this.reduce = reduce;
-    return this;
-};
-
-Query.prototype.distinct = function(selector) {
-    this.op = 'distinct';
-    this.where(selector);
-    return this;
-};
-
-// More options
-
-Query.prototype.where = function(selector) {
-    if ('undefined' === typeof selector) {
-        selector = {};
+QueryBuilder.prototype.where = function(query) {
+    if ('undefined' === typeof query) {
+        query = {};
     }
 
-    this.selector = selector;
+    this._query.query = query;
     return this;
 };
 
-Query.prototype.select = function(fields) {
-    this.fields = fields;
-    return this;
-};
-
-Query.prototype.skip = function(skip) {
-    this.options.skip = skip;
-    return this;
-};
-
-Query.prototype.limit = function(limit) {
-    this.options.limit = limit;
-    return this;
-};
-
-Query.prototype.sort = function(sort) {
-    this.options.sort = sort;
-    return this;
-};
-
-Query.prototype.multi = function(multi) {
-    if ('undefined' === typeof multi) {
-        multi = true;
-    }
-
-    this.options.multi = multi;
-    return this;
-};
-
-Query.prototype.lean = function(lean) {
+QueryBuilder.prototype.lean = function(lean) {
     if ('undefined' === typeof lean) {
         lean = true;
     }
 
-    this.options.lean = lean;
+    this._query.options.lean = lean;
     return this;
 };
 
-Query.prototype.setDoc = function(doc) {
-    this.doc = doc;
+QueryBuilder.prototype.toQuery = function() {
+    return this._query;
+};
+
+QueryBuilder.prototype.exec = function(callback) {
+    var deferred = $.Deferred();
+    var promise = this._mondo.handle(this._collection, this._query, deferred, this._options);
+    if (callback) {
+        promise.then(function() {
+            callback.apply(null, [null].concat([].slice.call(arguments, 0)));
+        }, function(err) {
+            callback(err);
+        });
+    }
+    return promise;
+};
+
+// Shorthand commands
+
+QueryBuilder.prototype.insert = function(doc) {
+    this.setCommand('insert');
+    this.setDoc(doc);
+    return this;
+};
+
+QueryBuilder.prototype.filter = function(query) {
+    this.setCommand('filter');
+    this.where(query);
+    return this;
+};
+
+QueryBuilder.prototype.find = function(query) {
+    this.setCommand('find');
+    this.where(query);
+    return this;
+};
+
+QueryBuilder.prototype.update = function(doc) {
+    this.setCommand('update');
+    this.setDoc(doc);
+    return this;
+};
+
+QueryBuilder.prototype.remove = function(query) {
+    this.setCommand('remove');
+    this.where(query);
+    return this;
+};
+
+QueryBuilder.prototype.count = function(query) {
+    this.setCommand('count');
+    this.where(query);
+    return this;
+};
+
+QueryBuilder.prototype.mapReduce = function(map, reduce) {
+    this.setCommand('mapReduce');
+    this._map = map;
+    this._reduce = reduce;
+    return this;
+};
+
+QueryBuilder.prototype.distinct = function(query) {
+    this.setCommand('distinct');
+    this.where(query);
     return this;
 };
 function utils(obj) {
@@ -567,7 +563,7 @@ utils.forEach = function(obj, iterator, context) {
     var breaker = {};
 
     if (obj == null) return obj;
-    if ([].forEach && obj.forEach === [].forEach) {
+    if (Array.prototype.forEach && obj.forEach === Array.prototype.forEach) {
         obj.forEach(iterator, context);
     } else if (obj.length === +obj.length) {
         for (var i = 0, length = obj.length; i < length; i++) {
@@ -582,10 +578,22 @@ utils.forEach = function(obj, iterator, context) {
     return obj;
 };
 
+utils.keys = function(obj) {
+    if (!_.isObject(obj)) return [];
+    if (Object.keys) return Object.keys(obj);
+    var keys = [];
+    for (var key in obj) {
+        if (_.has(obj, key)) {
+            keys.push(key);
+        }
+    }
+    return keys;
+};
+
 utils.map = function(obj, iterator, context) {
     var results = [];
     if (obj == null) return results;
-    if ([].map && obj.map === [].map) return obj.map(iterator, context);
+    if (Array.prototype.map && obj.map === Array.prototype.map) return obj.map(iterator, context);
     utils.forEach(obj, function(value, index, list) {
         results.push(iterator.call(context, value, index, list));
     });
@@ -595,7 +603,7 @@ utils.map = function(obj, iterator, context) {
 utils.filter = function(obj, predicate, context) {
     var results = [];
     if (obj == null) return results;
-    if ([].filter && obj.filter === [].filter) return obj.filter(predicate, context);
+    if (Array.prototype.filter && obj.filter === Array.prototype.filter) return obj.filter(predicate, context);
     each(obj, function(value, index, list) {
         if (predicate.call(context, value, index, list)) results.push(value);
     });
@@ -606,13 +614,31 @@ utils.isArray = Array.isArray || function(obj) {
     return toString.call(obj) == '[object Array]';
 };
 
+utils.indexOf = function(array, item, isSorted) {
+    if (array == null) return -1;
+    var i = 0,
+        length = array.length;
+    if (isSorted) {
+        if (typeof isSorted == 'number') {
+            i = (isSorted < 0 ? Math.max(0, length + isSorted) : isSorted);
+        } else {
+            i = _.sortedIndex(array, item);
+            return array[i] === item ? i : -1;
+        }
+    }
+    if (Array.prototype.indexOf && array.indexOf === Array.prototype.indexOf) return array.indexOf(item, isSorted);
+    for (; i < length; i++)
+        if (array[i] === item) return i;
+    return -1;
+};
+
 utils.mixin = function(target, obj) {
     for (var name in obj) {
         if (typeof obj[name] === 'function') {
             var func = target[name] = obj[name];
             target.prototype[name] = function() {
                 var args = [this._wrapped];
-                [].push.apply(args, arguments);
+                Array.prototype.push.apply(args, arguments);
                 return func.apply(this, args);
             };
         }
@@ -620,116 +646,101 @@ utils.mixin = function(target, obj) {
 };
 
 utils.mixin(utils, utils);
-function AbstractStore() {
+function AbstractStore(name, options) {
     if (!(this instanceof AbstractStore)) {
-        return new AbstractStore();
+        return new AbstractStore(name);
     }
+
+    this.name = name;
+    this.options = options || {};
 }
 
-// beforeHandle
-// onError
-// onSuccess
-// beforeNext
+AbstractStore.prototype.initCollection = function(collection) {};
 
-AbstractStore.prototype.name = 'Abstract';
+AbstractStore.prototype.handle = function(collection, query, deferred, next) {
+    var self = this;
 
-AbstractStore.prototype.handle = function(query, deferred, Model, next) {
-    if ('function' === typeof this[query.op]) {
-        return this[query.op](query, deferred, Model, next);
+    if ('function' === typeof this.options.beforeHandle) {
+        this.options.beforeHandle(collection, query);
     }
 
-    throw new Error('Handler for operation ' + query.op + ' not defined');
+    if ('function' === typeof this[query.command]) {
+        return this[query.command](collection, query, deferred, function(err) {
+            if (err && 'function' === typeof self.options.onError) {
+                self.options.onError(err);
+            }
+
+            if ('function' === typeof self.options.beforeNext) {
+                self.options.beforeNext(collection, query);
+            }
+
+            next(err);
+        });
+    }
+
+    throw new Error('Handler for operation ' + query.command + ' not defined');
 };
 
 // Read
 
-AbstractStore.prototype.find = function(query, deferred, Model, next) {
-    throw new Error('You have not implement ' + this.name + '#find()');
-};
-
-AbstractStore.prototype.findOne = function(query, deferred, Model, next) {
-    throw new Error('You have not implement ' + this.name + '#findOne()');
-};
-
-AbstractStore.prototype.count = function(query, deferred, Model, next) {
-    throw new Error('You have not implement ' + this.name + '#count()');
-};
-
-AbstractStore.prototype.mapReduce = function(query, deferred, Model, next) {
-    throw new Error('You have not implement ' + this.name + '#mapReduce()');
-};
-
-AbstractStore.prototype.distinct = function(query, deferred, Model, next) {
-    throw new Error('You have not implement ' + this.name + '#distinct()');
-};
-
-// Write
-
-AbstractStore.prototype.insert = function(query, deferred, Model, next) {
-    throw new Error('You have not implement ' + this.name + '#insert()');
-};
-
-AbstractStore.prototype.update = function(query, deferred, Model, next) {
-    throw new Error('You have not implement ' + this.name + '#update()');
-};
-
-AbstractStore.prototype.remove = function(query, deferred, Model, next) {
-    throw new Error('You have not implement ' + this.name + '#remove()');
-};
-function IndexedDBStore(options) {
-    if (!(this instanceof IndexedDBStore)) {
-        return new IndexedDBStore(options);
+utils.forEach(['filter', 'find', 'count', 'mapReduce', 'distinct', 'insert', 'update', 'remove'], function(method) {
+    AbstractStore.prototype[method] = function(collection, query, deferred, next) {
+        throw new Error('You have not implement ' + this.name + '#' + method + '()');
+    };
+});
+function AbstractWebStorageStore(name, storage, options) {
+    if (!(this instanceof AbstractWebStorageStore)) {
+        return new AbstractWebStorageStore(name, storage, options);
     }
+
+    AbstractStore.call(this, name, options);
+    this._storage = storage;
 }
 
-IndexedDBStore.prototype = new AbstractStore();
-IndexedDBStore.prototype.constructor = IndexedDBStore;
+AbstractWebStorageStore.prototype = new AbstractStore();
+AbstractWebStorageStore.prototype.constructor = AbstractWebStorageStore;
 
-IndexedDBStore.prototype.name = 'IndexedDB';
-function LocalStorageStore(namespace, options) {
-    if (!(this instanceof LocalStorageStore)) {
-        return new LocalStorageStore(options);
-    }
-}
-
-LocalStorageStore.prototype = new AbstractStore();
-LocalStorageStore.prototype.constructor = LocalStorageStore;
-
-LocalStorageStore.prototype.name = 'LocalStorage';
-
-LocalStorageStore.prototype.namespace = null;
-
-LocalStorageStore.prototype._get = function(collectionName) {
+AbstractWebStorageStore.prototype._get = function(collectionName) {
     var array;
+
     try {
-        array = JSON.parse(window.localStorage[collectionName]);
+        array = JSON.parse(this._storage[collectionName]);
     } catch (e) {
         // in case of any exception when parsing, just return an empty array
         array = [];
     }
-    if (!utils.isArray(array)) array = [];
+
+    if (!utils.isArray(array)) {
+        array = [];
+    }
 
     return array;
 };
 
-LocalStorageStore.prototype._save = function(collectionName, array) {
-    window.localStorage[collectionName] = JSON.stringify(array);
+AbstractWebStorageStore.prototype._save = function(collectionName, array) {
+    this._storage[collectionName] = JSON.stringify(array);
 };
 
 // Read
 
-LocalStorageStore.prototype.find = function(query, deferred, Model, next) {
+AbstractWebStorageStore.prototype.filter = function(collection, query, deferred, next) {
     var array = this._get(query.collectionName);
     var docs = array;
-    var models = utils.filter(docs, function(doc) {
-        return new Model(doc);
-    });
-    deferred.resolve(models);
+
+    if (options.transform && !query.options.lean) {
+        var models = utils.map(docs, options.transform);
+    }
+
+    setTimeout(function() {
+        deferred.resolve(models);
+    }, 0);
+
+    return deferred.promise();
 };
 
 // Write
 
-AbstractStore.prototype.insert = function(query, deferred, Model, next) {
+AbstractWebStorageStore.prototype.insert = function(collection, query, deferred, next) {
     var array = this._get(query.collectionName);
     var docs;
 
@@ -739,49 +750,77 @@ AbstractStore.prototype.insert = function(query, deferred, Model, next) {
         docs = [query.doc];
     }
 
-    array.concat(docs);
+    array = array.concat(docs);
     this._save(query.collectionName, array);
-    var models = utils.filter(docs, function(doc) {
+    var models = utils.map(docs, function(doc) {
         return new Model(doc);
     });
-    deferred.resolve(models);
+    setTimeout(function() {
+        deferred.resolve(models);
+    }, 0);
 
-    next();
+    return next();
 };
+function IndexedDBStore(options) {
+    if (!(this instanceof IndexedDBStore)) {
+        return new IndexedDBStore(options);
+    }
+
+    AbstractStore.call(this, 'IndexedDB', options);
+}
+
+IndexedDBStore.prototype = new AbstractStore();
+IndexedDBStore.prototype.constructor = IndexedDBStore;
+function LocalStorageStore(options) {
+    if (!(this instanceof LocalStorageStore)) {
+        return new LocalStorageStore(options);
+    }
+
+    AbstractWebStorageStore.call(this, 'LocalStorage', window.localStorage, options);
+}
+
+LocalStorageStore.prototype = new AbstractWebStorageStore();
+LocalStorageStore.prototype.constructor = LocalStorageStore;
 function NeDBStore(options) {
     if (!(this instanceof NeDBStore)) {
         return new NeDBStore(options);
     }
+
+    AbstractStore.call(this, 'NeDB', options);
 }
 
 NeDBStore.prototype = new AbstractStore();
 NeDBStore.prototype.constructor = NeDBStore;
 
-NeDBStore.prototype.name = 'NeDB';
-
-function RestStore(options) {
+NeDBStore.prototype.initCollection = function(collection) {
+    collection._nedb = new Datastore();
+};
+function RestStore(url, options) {
     if (!(this instanceof RestStore)) {
-        return new RestStore(options);
+        return new RestStore(url, options);
     }
 
-    if ('string' === typeof options) {
-        this._url = options;
-        options = undefined;
+    if ('string' !== typeof url) {
+        options = url;
+        url = undefined;
     }
 
-    options = options || {};
+    AbstractStore.call(this, 'Rest', options);
+    this._rootUrl = url || this.options.url;
+
+    if ('undefined' === typeof this._rootUrl) {
+        throw new TypeError('url must not be undefined');
+    }
 }
 
 RestStore.prototype = new AbstractStore();
 RestStore.prototype.constructor = RestStore;
 
-RestStore.prototype.name = 'Rest';
-
 // Read
 
-RestStore.prototype.find = function(query, deferred, Model, next) {
-    var queryUri = new QueryURI(this._url);
-    queryUri.collection(query.collectionName).where(query.selector);
+RestStore.prototype.filter = function(collection, query, deferred, next) {
+    var queryUri = new QueryURI(this._rootUrl);
+    queryUri.from(query.collectionName).where(query.selector);
 
     if (query.fields) {
         queryUri.select(query.fields);
@@ -804,27 +843,29 @@ RestStore.prototype.find = function(query, deferred, Model, next) {
         callback();
     };
 
-    $.ajax({
+    $.ajax(utils.extend(this.options, {
         type: 'GET',
         url: queryUri.toString(),
         success: function(data, textStatus, jqXHR) {
-            if (query.options.lean) {
-                return deferred.resolve(data);
+            if (collection.options.transform && !query.options.lean) {
+                data = utils.map(data, function(doc) {
+                    return collection.options.transform(doc, collection);
+                });
             }
-            var models = utils.map(data, function(doc) {
-                return new Model(doc);
-            });
-            deferred.resolve(models);
+
+            deferred.resolve(data);
         },
         error: function(jqXHR, textStatus, errorThrown) {
             deferred.reject(errorThrown);
         }
-    });
+    }));
+
+    return promise;
 };
 
-RestStore.prototype.findOne = function(query, deferred, Model, next) {
-    var queryUri = new QueryURI(this._url);
-    queryUri.collection(query.collectionName).setOp('find_one').where(query.selector);
+RestStore.prototype.find = function(collection, query, deferred, next) {
+    var queryUri = new QueryURI(this._rootUrl);
+    queryUri.from(query.collectionName).setOp('find').where(query.selector);
 
     if (query.fields) {
         queryUri.select(query.fields);
@@ -842,25 +883,27 @@ RestStore.prototype.findOne = function(query, deferred, Model, next) {
         queryUri.limit(query.options.limit);
     }
 
-    $.ajax({
+    $.ajax(utils.extend(this.options, {
         type: 'GET',
         url: queryUri.toString(),
         success: function(data, textStatus, jqXHR) {
-            if (query.options.lean) {
-                return deferred.resolve(data);
+            if (collection.options.transform && !query.options.lean) {
+                data = collection.options.transform(data, collection);
             }
-            var model = new Model(doc);
-            deferred.resolve(model);
+
+            deferred.resolve(data);
         },
         error: function(jqXHR, textStatus, errorThrown) {
             deferred.reject(errorThrown);
         }
-    });
+    }));
+
+    return deferred.promise();
 };
 
-RestStore.prototype.count = function(query, deferred, Model, next) {
-    var queryUri = new QueryURI(this._url);
-    queryUri.collection(query.collectionName).setOp('find_one').where(query.selector);
+RestStore.prototype.count = function(collection, query, deferred, next) {
+    var queryUri = new QueryURI(this._rootUrl);
+    queryUri.from(query.collectionName).setOp('count').where(query.selector);
 
     if (query.options.skip) {
         queryUri.skip(query.options.skip);
@@ -870,7 +913,7 @@ RestStore.prototype.count = function(query, deferred, Model, next) {
         queryUri.limit(query.options.limit);
     }
 
-    $.ajax({
+    $.ajax(utils.extend(this.options, {
         type: 'GET',
         url: queryUri.toString(),
         success: function(data, textStatus, jqXHR) {
@@ -879,12 +922,14 @@ RestStore.prototype.count = function(query, deferred, Model, next) {
         error: function(jqXHR, textStatus, errorThrown) {
             deferred.reject(errorThrown);
         }
-    });
+    }));
+
+    return deferred.promise();
 };
 
-RestStore.prototype.mapReduce = function(query, deferred, Model, next) {
-    var queryUri = new QueryURI(this._url);
-    queryUri.collection(query.collectionName).setOp('map_reduce').map(query.map).reduce(query.reduce).where(query.selector);
+RestStore.prototype.mapReduce = function(collection, query, deferred, next) {
+    var queryUri = new QueryURI(this._rootUrl);
+    queryUri.from(query.collectionName).setOp('map_reduce').map(query.map).reduce(query.reduce).where(query.selector);
 
     if (query.options.sort) {
         queryUri.sort(query.options.sort);
@@ -894,7 +939,7 @@ RestStore.prototype.mapReduce = function(query, deferred, Model, next) {
         queryUri.limit(query.options.limit);
     }
 
-    $.ajax({
+    $.ajax(utils.extend(this.options, {
         type: 'GET',
         url: queryUri.toString(),
         success: function(data, textStatus, jqXHR) {
@@ -903,60 +948,68 @@ RestStore.prototype.mapReduce = function(query, deferred, Model, next) {
         error: function(jqXHR, textStatus, errorThrown) {
             deferred.reject(errorThrown);
         }
-    });
+    }));
+
+    return deferred.promise();
 };
 
-RestStore.prototype.distinct = function(query, deferred, Model, next) {
-    var queryUri = new QueryURI(this._url);
-    queryUri.collection(query.collectionName).setOp('distinct').key(query.key);
+RestStore.prototype.distinct = function(collection, query, deferred, next) {
+    var queryUri = new QueryURI(this._rootUrl);
+    queryUri.from(query.collectionName).setOp('distinct').key(query.key);
 
-    $.ajax({
+    $.ajax(utils.extend(this.options, {
         type: 'GET',
         url: queryUri.toString(),
         success: function(data, textStatus, jqXHR) {
-            if (query.options.lean) {
-                return deferred.resolve(data);
+            if (collection.options.transform && !query.options.lean) {
+                data = collection.options.transform(data, collection);
             }
-            var model = new Model(doc);
-            deferred.resolve(model);
+
+            deferred.resolve(data);
         },
         error: function(jqXHR, textStatus, errorThrown) {
             deferred.reject(errorThrown);
         }
-    });
+    }));
+
+    return deferred.promise();
 };
 
 // Write
 
-RestStore.prototype.insert = function(query, deferred, Model, next) {
-    var queryUri = new QueryURI(this._url);
-    queryUri.collection(query.collectionName);
+RestStore.prototype.insert = function(collection, query, deferred, next) {
+    var queryUri = new QueryURI(this._rootUrl);
+    queryUri.from(query.collectionName);
 
-    $.ajax({
+    $.ajax(utils.extend(this.options, {
         type: 'POST',
         url: queryUri.toString(),
         data: JSON.stringify(query.doc),
         success: function(data, textStatus, jqXHR) {
-            if (query.options.lean) {
-                return deferred.resolve(data);
+            if (collection.options.transform && !query.options.lean) {
+                if (utils.isArray(query.doc)) {
+                    data = utils.map(data, function(doc) {
+                        return collection.options.transform(doc, collection);
+                    });
+                } else {
+                    data = collection.options.transform(data, collection);
+                }
             }
-            var models = utils.map(data, function(doc) {
-                return new Model(doc);
-            });
-            deferred.resolve(models);
+
+            deferred.resolve(data);
         },
         error: function(jqXHR, textStatus, errorThrown) {
             deferred.reject(errorThrown);
         }
-    });
+    }));
 
     // TODO: pass deferred to next layer
-    next();
+    return next();
 };
 
-RestStore.prototype.update = function(query, deferred, Model, next) {
-    var queryUri = new QueryURI(this._url);
-    queryUri.collection(query.collectionName).where(query.selector);
+RestStore.prototype.update = function(collection, query, deferred, next) {
+    var queryUri = new QueryURI(this._rootUrl);
+    queryUri.from(query.collectionName).where(query.selector);
 
     if (query.options.multi) {
         queryUri.multi(query.options.multi);
@@ -966,53 +1019,61 @@ RestStore.prototype.update = function(query, deferred, Model, next) {
         queryUri.upsert(query.options.upsert);
     }
 
-    $.ajax({
+    $.ajax(utils.extend(this.options, {
         type: 'PATCH',
         url: queryUri.toString(),
         data: JSON.stringify(query.doc),
         success: function(data, textStatus, jqXHR) {
-            if (query.options.lean) {
-                return deferred.resolve(data);
+            if (collection.options.transform && !query.options.lean) {
+                if (query.options.multi) {
+                    data = utils.map(data, function(doc) {
+                        return collection.options.transform(doc, collection);
+                    });
+                } else {
+                    data = collection.options.transform(data, collection);
+                }
             }
-            var models = utils.map(data, function(doc) {
-                return new Model(doc);
-            });
-            deferred.resolve(models);
+
+            deferred.resolve(data);
         },
         error: function(jqXHR, textStatus, errorThrown) {
             deferred.reject(errorThrown);
         }
-    });
+    }));
 
-    next();
+    return next();
 };
 
-RestStore.prototype.remove = function(query, deferred, Model, next) {
-    var queryUri = new QueryURI(this._url);
-    queryUri.collection(query.collectionName).where(query.selector);
+RestStore.prototype.remove = function(collection, query, deferred, next) {
+    var queryUri = new QueryURI(this._rootUrl);
+    queryUri.from(query.collectionName).where(query.selector);
 
-    if (query.options.single) {
-        queryUri.single(query.options.single);
+    if (query.options.multi) {
+        queryUri.multi(query.options.multi);
     }
 
-    $.ajax({
+    $.ajax(utils.extend(this.options, {
         type: 'DELETE',
         url: queryUri.toString(),
         success: function(data, textStatus, jqXHR) {
-            if (query.options.lean) {
-                return deferred.resolve(data);
+            if (collection.options.transform && !query.options.lean) {
+                if (query.options.multi) {
+                    data = utils.map(data, function(doc) {
+                        return collection.options.transform(doc, collection);
+                    });
+                } else {
+                    data = collection.options.transform(data, collection);
+                }
             }
-            var models = utils.map(data, function(doc) {
-                return new Model(doc);
-            });
-            deferred.resolve(models);
+
+            deferred.resolve(data);
         },
         error: function(jqXHR, textStatus, errorThrown) {
             deferred.reject(errorThrown);
         }
-    });
+    }));
 
-    next();
+    return next();
 };
 
 function QueryURI(rootUrl) {
@@ -1023,30 +1084,33 @@ function QueryURI(rootUrl) {
     this._uri = new URI(rootUrl);
 }
 
-QueryURI.prototype.collection = function(collectionName) {
+QueryURI.prototype.from = function(collectionName) {
+    this._uri.filename(collectionName);
     return this;
 };
 
 QueryURI.prototype.setOp = function(op) {
+    this._uri.addSearch('op', op);
     return this;
 };
 
 QueryURI.prototype.where = function(selector) {
-    if ('undefined' !== typeof selector._id) {
-        //TODO
-    }
+    this._uri.addSearch('selector', JSON.stringify(selector));
     return this;
 };
 
 QueryURI.prototype.skip = function(skip) {
+    this._uri.addSearch('skip', skip);
     return this;
 };
 
 QueryURI.prototype.limit = function(limit) {
+    this._uri.addSearch('limit', limit);
     return this;
 };
 
 QueryURI.prototype.sort = function(sort) {
+    this._uri.addSearch('sort', JSON.stringify(sort));
     return this;
 };
 
@@ -1057,77 +1121,20 @@ function SessionStorageStore(options) {
     if (!(this instanceof SessionStorageStore)) {
         return new SessionStorageStore(options);
     }
+
+    AbstractWebStorageStore.call(this, 'SessionStorage', window.sessionStorage, options);
 }
-SessionStorageStore.prototype = new AbstractStore();
+
+SessionStorageStore.prototype = new AbstractWebStorageStore();
 SessionStorageStore.prototype.constructor = SessionStorageStore;
-
-SessionStorageStore.prototype.name = 'SessionStorage';
-
-SessionStorageStore.prototype.namespace = null;
-
-SessionStorageStore.prototype._get = function(collectionName) {
-    var array;
-    try {
-        array = JSON.parse(window.sessionStorage[collectionName]);
-    } catch (e) {
-        // in case of any exception when parsing, just return an empty array
-        array = [];
-    }
-    if (!utils.isArray(array)) array = [];
-
-    return array;
-};
-
-SessionStorageStore.prototype._save = function(collectionName, array) {
-    window.sessionStorage[collectionName] = JSON.stringify(array);
-};
-
-// Read
-
-SessionStorageStore.prototype.find = function(query, deferred, Model, next) {
-    var array = this._get(query.collectionName);
-    var docs = array;
-    var models = utils.filter(docs, function(doc) {
-        return new Model(doc);
-    });
-
-    setTimeout(function() {
-        deferred.resolve(models);
-    }, 0);
-};
-
-// Write
-
-AbstractStore.prototype.insert = function(query, deferred, Model, next) {
-    var array = this._get(query.collectionName);
-    var docs;
-
-    if (utils.isArray(query.doc)) {
-        docs = query.doc;
-    } else {
-        docs = [query.doc];
-    }
-
-    array.concat(docs);
-    this._save(query.collectionName, array);
-    var models = utils.filter(docs, function(doc) {
-        return new Model(doc);
-    });
-
-    setTimeout(function() {
-        deferred.resolve(models);
-    }, 0);
-
-    next();
-};
 function WebSQLStore(options) {
     if (!(this instanceof WebSQLStore)) {
         return new WebSQLStore(options);
     }
+
+    AbstractStore.call(this, 'WebSQL', options);
 }
 
 WebSQLStore.prototype = new AbstractStore();
-WebSQLStore.prototype.constructor = WebSQLStore;
-
-WebSQLStore.prototype.name = 'WebSQL';return Mondo;
-}, jQuery);
+WebSQLStore.prototype.constructor = WebSQLStore;return Mondo;
+});

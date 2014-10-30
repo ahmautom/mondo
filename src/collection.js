@@ -1,29 +1,53 @@
-function Collection(mondo, collectionName, Model, options) {
+function Collection(mondo, name, options) {
+    if (!(this instanceof Collection)) {
+        return new Collection(mondo, name, options);
+    }
     // TODO: process arguments
 
     this._mondo = mondo;
-    this.collectionName = collectionName;
-    this.Model = Model;
+    this.name = name;
+    this.options = options || {};
 
     // TODO: process options
 }
 
-Collection.prototype.insert = function(docs, options, callback) {
-    if ('function' == typeof options) {
+// Read operations
+
+Collection.prototype.filter = function(selector, fields, options, callback) {
+    if ('function' == typeof selector) {
+        callback = selector;
+        selector = {};
+        fields = undefined;
+        options = undefined;
+    } else if ('function' == typeof fields) {
+        callback = fields;
+        fields = undefined;
+        options = undefined;
+    } else if ('function' == typeof options) {
         callback = options;
         options = undefined;
     }
 
     options = options || {};
 
-    var query = new Query(this.collectionName);
-    query.insert(docs);
+    var qb = new QueryBuilder(this._mondo, this, options);
+    qb.from(this.name).filter(selector);
 
-    var deferred = $.Deferred();
-    this._mondo.handle(query, deferred, this.Model, options);
-    var promise = deferred.promise();
-    handleCallback(promise, callback);
-    return promise;
+    if (fields) {
+        qb.select(fields);
+    }
+
+    utils.forEach(['sort', 'skip', 'limit', 'lean'], function(method) {
+        if (options[method]) {
+            qb[method](options[method]);
+        }
+    });
+
+    if (callback) {
+        qb.exec(callback);
+    }
+
+    return qb;
 };
 
 Collection.prototype.find = function(selector, fields, options, callback) {
@@ -43,33 +67,56 @@ Collection.prototype.find = function(selector, fields, options, callback) {
 
     options = options || {};
 
-    var query = new Query(this.collectionName);
-    query.find().where(selector);
+    var qb = new QueryBuilder(this._mondo, this, options);
+    qb.from(this.name).find(selector);
 
     if (fields) {
-        query.select(fields);
+        qb.select(fields);
     }
 
-    utils.forEach(['sort', 'skip', 'limit', 'lean'], function(method) {
+    utils.forEach(['lean'], function(method) {
         if (options[method]) {
-            query[method](options[method]);
+            qb[method](options[method]);
         }
     });
 
-    var deferred = $.Deferred();
-    this._mondo.handle(query, deferred, this.Model, options);
-    var promise = deferred.promise();
-    handleCallback(promise, callback);
-    return promise;
+    if (callback) {
+        qb.exec(callback);
+    }
+
+    return qb;
 };
 
-Collection.prototype.findOne = function(selector, fields, options, callback) {
+Collection.prototype.count = function(selector, options, callback) {
     if ('function' == typeof selector) {
         callback = selector;
         selector = {};
-        fields = undefined;
         options = undefined;
-    } else if ('function' == typeof fields) {
+    } else if ('function' == typeof options) {
+        callback = options;
+        options = undefined;
+    }
+
+    options = options || {};
+
+    var qb = new QueryBuilder(this._mondo, this, options);
+    qb.from(this.name).count(selector);
+
+    utils.forEach(['skip', 'limit'], function(method) {
+        if (options[method]) {
+            qb[method](options[method]);
+        }
+    });
+
+    if (callback) {
+        qb.exec(callback);
+    }
+
+    return qb;
+};
+
+Collection.prototype.distinct = function(key, fields, options, callback) {
+    if ('function' == typeof fields) {
         callback = fields;
         fields = undefined;
         options = undefined;
@@ -80,24 +127,66 @@ Collection.prototype.findOne = function(selector, fields, options, callback) {
 
     options = options || {};
 
-    var query = new Query(this.collectionName);
-    query.findOne().where(selector);
+    var qb = new QueryBuilder(this._mondo, this, options);
+    qb.from(this.name).distinct(key);
 
     if (fields) {
-        query.select(fields);
+        qb.select(fields);
     }
 
     utils.forEach(['lean'], function(method) {
         if (options[method]) {
-            query[method](options[method]);
+            qb[method](options[method]);
         }
     });
 
-    var deferred = $.Deferred();
-    this._mondo.handle(query, deferred, this.Model, options);
-    var promise = deferred.promise();
-    handleCallback(promise, callback);
-    return promise;
+    if (callback) {
+        qb.exec(callback);
+    }
+
+    return qb;
+};
+
+Collection.prototype.mapReduce = function(map, reduce, options, callback) {
+    if ('function' == typeof options) {
+        callback = options;
+        options = undefined;
+    }
+
+    var qb = new QueryBuilder(this._mondo, this, options);
+    qb.from(this.name).mapReduce(map, reduce);
+
+    utils.forEach(['qb', 'sort', 'limit'], function(method) {
+        if (options[method]) {
+            qb[method](options[method]);
+        }
+    });
+
+    if (callback) {
+        qb.exec(callback);
+    }
+
+    return qb;
+};
+
+// Write operations
+
+Collection.prototype.insert = function(docs, options, callback) {
+    if ('function' == typeof options) {
+        callback = options;
+        options = undefined;
+    }
+
+    options = options || {};
+
+    var qb = new QueryBuilder(this._mondo, this, options);
+    qb.from(this.name).insert(docs);
+
+    if (callback) {
+        qb.exec(callback);
+    }
+
+    return qb;
 };
 
 Collection.prototype.update = function(selector, doc, options, callback) {
@@ -117,20 +206,20 @@ Collection.prototype.update = function(selector, doc, options, callback) {
 
     options = options || {};
 
-    var query = new Query(this.collectionName);
-    query.update(doc).where(selector);
+    var qb = new QueryBuilder(this._mondo, this, options);
+    qb.from(this.name).update(doc).where(selector);
 
     utils.forEach(['upsert', 'multi'], function(method) {
         if (options[method]) {
-            query[method](options[method]);
+            qb[method](options[method]);
         }
     });
 
-    var deferred = $.Deferred();
-    this._mondo.handle(query, deferred, this.Model, options);
-    var promise = deferred.promise();
-    handleCallback(promise, callback);
-    return promise;
+    if (callback) {
+        qb.exec(callback);
+    }
+
+    return qb;
 };
 
 Collection.prototype.remove = function(selector, options, callback) {
@@ -145,107 +234,20 @@ Collection.prototype.remove = function(selector, options, callback) {
 
     options = options || {};
 
-    var query = new Query(this.collectionName);
-    query.remove().where(selector);
+    var qb = new QueryBuilder(this._mondo, this, options);
+    qb.from(this.name).remove(selector);
 
     utils.forEach(['single'], function(method) {
         if (options[method]) {
-            query[method](options[method]);
+            qb[method](options[method]);
         }
     });
 
-    var deferred = $.Deferred();
-    this._mondo.handle(query, deferred, this.Model, options);
-    var promise = deferred.promise();
-    handleCallback(promise, callback);
-    return promise;
-};
-
-Collection.prototype.count = function(selector, options, callback) {
-    if ('function' == typeof selector) {
-        callback = selector;
-        selector = {};
-        options = undefined;
-    } else if ('function' == typeof options) {
-        callback = options;
-        options = undefined;
+    if (callback) {
+        qb.exec(callback);
     }
 
-    options = options || {};
-
-    var query = new Query(this.collectionName);
-    query.count().where(selector);
-
-    utils.forEach(['skip', 'limit'], function(method) {
-        if (options[method]) {
-            query[method](options[method]);
-        }
-    });
-
-    var deferred = $.Deferred();
-    this._mondo.handle(query, deferred, this.Model, options);
-    var promise = deferred.promise();
-    handleCallback(promise, callback);
-    return promise;
-};
-
-Collection.prototype.distinct = function(selector, fields, options, callback) {
-    if ('function' == typeof selector) {
-        callback = selector;
-        selector = {};
-        fields = undefined;
-        options = undefined;
-    } else if ('function' == typeof fields) {
-        callback = fields;
-        fields = undefined;
-        options = undefined;
-    } else if ('function' == typeof options) {
-        callback = options;
-        options = undefined;
-    }
-
-    options = options || {};
-
-    var query = new Query(this.collectionName);
-    query.distinct().where(selector);
-
-    if (fields) {
-        query.select(fields);
-    }
-
-    utils.forEach(['lean'], function(method) {
-        if (options[method]) {
-            query[method](options[method]);
-        }
-    });
-
-    var deferred = $.Deferred();
-    this._mondo.handle(query, deferred, this.Model, options);
-    var promise = deferred.promise();
-    handleCallback(promise, callback);
-    return promise;
-};
-
-Collection.prototype.mapReduce = function(map, reduce, options, callback) {
-    if ('function' == typeof options) {
-        callback = options;
-        options = undefined;
-    }
-
-    var query = new Query(this.collectionName);
-    query.mapReduce(map, reduce);
-
-    utils.forEach(['query', 'sort', 'limit'], function(method) {
-        if (options[method]) {
-            query[method](options[method]);
-        }
-    });
-
-    var deferred = $.Deferred();
-    this._mondo.handle(query, deferred, this.Model, options);
-    var promise = deferred.promise();
-    handleCallback(promise, callback);
-    return promise;
+    return qb;
 };
 
 // Sugar
@@ -267,17 +269,3 @@ Collection.prototype.updateById = function(id, doc, options, callback) {
         _id: id
     }, doc, options, callback);
 };
-
-// Helpers
-
-function handleCallback(promise, callback) {
-    if (callback) {
-        promise.then(function() {
-            callback.apply(null, [null].concat([].slice.call(arguments, 0)));
-        }, function(err) {
-            callback(err);
-        });
-    }
-
-    return promise;
-}

@@ -10,7 +10,7 @@
         "package.json"
     ],
     "dependencies": {
-        "URIjs": "~1.13.2",
-        "nedb": "~0.10.6"
+        "URIjs": "~1.13.1",
+        "nedb": "*"
     }
 }

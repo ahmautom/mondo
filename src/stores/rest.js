@@ -1,26 +1,29 @@
-function RestStore(options) {
+function RestStore(url, options) {
     if (!(this instanceof RestStore)) {
-        return new RestStore(options);
+        return new RestStore(url, options);
     }
 
-    if ('string' === typeof options) {
-        this._url = options;
-        options = undefined;
+    if ('string' !== typeof url) {
+        options = url;
+        url = undefined;
     }
 
-    options = options || {};
+    AbstractStore.call(this, 'Rest', options);
+    this._rootUrl = url || this.options.url;
+
+    if ('undefined' === typeof this._rootUrl) {
+        throw new TypeError('url must not be undefined');
+    }
 }
 
 RestStore.prototype = new AbstractStore();
 RestStore.prototype.constructor = RestStore;
 
-RestStore.prototype.name = 'Rest';
-
 // Read
 
-RestStore.prototype.find = function(query, deferred, Model, next) {
-    var queryUri = new QueryURI(this._url);
-    queryUri.collection(query.collectionName).where(query.selector);
+RestStore.prototype.filter = function(collection, query, deferred, next) {
+    var queryUri = new QueryURI(this._rootUrl);
+    queryUri.from(query.collectionName).where(query.selector);
 
     if (query.fields) {
         queryUri.select(query.fields);
@@ -43,27 +46,29 @@ RestStore.prototype.find = function(query, deferred, Model, next) {
         callback();
     };
 
-    $.ajax({
+    $.ajax(utils.extend(this.options, {
         type: 'GET',
         url: queryUri.toString(),
         success: function(data, textStatus, jqXHR) {
-            if (query.options.lean) {
-                return deferred.resolve(data);
+            if (collection.options.transform && !query.options.lean) {
+                data = utils.map(data, function(doc) {
+                    return collection.options.transform(doc, collection);
+                });
             }
-            var models = utils.map(data, function(doc) {
-                return new Model(doc);
-            });
-            deferred.resolve(models);
+
+            deferred.resolve(data);
         },
         error: function(jqXHR, textStatus, errorThrown) {
             deferred.reject(errorThrown);
         }
-    });
+    }));
+
+    return promise;
 };
 
-RestStore.prototype.findOne = function(query, deferred, Model, next) {
-    var queryUri = new QueryURI(this._url);
-    queryUri.collection(query.collectionName).setOp('find_one').where(query.selector);
+RestStore.prototype.find = function(collection, query, deferred, next) {
+    var queryUri = new QueryURI(this._rootUrl);
+    queryUri.from(query.collectionName).setOp('find').where(query.selector);
 
     if (query.fields) {
         queryUri.select(query.fields);
@@ -81,25 +86,27 @@ RestStore.prototype.findOne = function(query, deferred, Model, next) {
         queryUri.limit(query.options.limit);
     }
 
-    $.ajax({
+    $.ajax(utils.extend(this.options, {
         type: 'GET',
         url: queryUri.toString(),
         success: function(data, textStatus, jqXHR) {
-            if (query.options.lean) {
-                return deferred.resolve(data);
+            if (collection.options.transform && !query.options.lean) {
+                data = collection.options.transform(data, collection);
             }
-            var model = new Model(doc);
-            deferred.resolve(model);
+
+            deferred.resolve(data);
         },
         error: function(jqXHR, textStatus, errorThrown) {
             deferred.reject(errorThrown);
         }
-    });
+    }));
+
+    return deferred.promise();
 };
 
-RestStore.prototype.count = function(query, deferred, Model, next) {
-    var queryUri = new QueryURI(this._url);
-    queryUri.collection(query.collectionName).setOp('find_one').where(query.selector);
+RestStore.prototype.count = function(collection, query, deferred, next) {
+    var queryUri = new QueryURI(this._rootUrl);
+    queryUri.from(query.collectionName).setOp('count').where(query.selector);
 
     if (query.options.skip) {
         queryUri.skip(query.options.skip);
@@ -109,7 +116,7 @@ RestStore.prototype.count = function(query, deferred, Model, next) {
         queryUri.limit(query.options.limit);
     }
 
-    $.ajax({
+    $.ajax(utils.extend(this.options, {
         type: 'GET',
         url: queryUri.toString(),
         success: function(data, textStatus, jqXHR) {
@@ -118,12 +125,14 @@ RestStore.prototype.count = function(query, deferred, Model, next) {
         error: function(jqXHR, textStatus, errorThrown) {
             deferred.reject(errorThrown);
         }
-    });
+    }));
+
+    return deferred.promise();
 };
 
-RestStore.prototype.mapReduce = function(query, deferred, Model, next) {
-    var queryUri = new QueryURI(this._url);
-    queryUri.collection(query.collectionName).setOp('map_reduce').map(query.map).reduce(query.reduce).where(query.selector);
+RestStore.prototype.mapReduce = function(collection, query, deferred, next) {
+    var queryUri = new QueryURI(this._rootUrl);
+    queryUri.from(query.collectionName).setOp('map_reduce').map(query.map).reduce(query.reduce).where(query.selector);
 
     if (query.options.sort) {
         queryUri.sort(query.options.sort);
@@ -133,7 +142,7 @@ RestStore.prototype.mapReduce = function(query, deferred, Model, next) {
         queryUri.limit(query.options.limit);
     }
 
-    $.ajax({
+    $.ajax(utils.extend(this.options, {
         type: 'GET',
         url: queryUri.toString(),
         success: function(data, textStatus, jqXHR) {
@@ -142,60 +151,68 @@ RestStore.prototype.mapReduce = function(query, deferred, Model, next) {
         error: function(jqXHR, textStatus, errorThrown) {
             deferred.reject(errorThrown);
         }
-    });
+    }));
+
+    return deferred.promise();
 };
 
-RestStore.prototype.distinct = function(query, deferred, Model, next) {
-    var queryUri = new QueryURI(this._url);
-    queryUri.collection(query.collectionName).setOp('distinct').key(query.key);
+RestStore.prototype.distinct = function(collection, query, deferred, next) {
+    var queryUri = new QueryURI(this._rootUrl);
+    queryUri.from(query.collectionName).setOp('distinct').key(query.key);
 
-    $.ajax({
+    $.ajax(utils.extend(this.options, {
         type: 'GET',
         url: queryUri.toString(),
         success: function(data, textStatus, jqXHR) {
-            if (query.options.lean) {
-                return deferred.resolve(data);
+            if (collection.options.transform && !query.options.lean) {
+                data = collection.options.transform(data, collection);
             }
-            var model = new Model(doc);
-            deferred.resolve(model);
+
+            deferred.resolve(data);
         },
         error: function(jqXHR, textStatus, errorThrown) {
             deferred.reject(errorThrown);
         }
-    });
+    }));
+
+    return deferred.promise();
 };
 
 // Write
 
-RestStore.prototype.insert = function(query, deferred, Model, next) {
-    var queryUri = new QueryURI(this._url);
-    queryUri.collection(query.collectionName);
+RestStore.prototype.insert = function(collection, query, deferred, next) {
+    var queryUri = new QueryURI(this._rootUrl);
+    queryUri.from(query.collectionName);
 
-    $.ajax({
+    $.ajax(utils.extend(this.options, {
         type: 'POST',
         url: queryUri.toString(),
         data: JSON.stringify(query.doc),
         success: function(data, textStatus, jqXHR) {
-            if (query.options.lean) {
-                return deferred.resolve(data);
+            if (collection.options.transform && !query.options.lean) {
+                if (utils.isArray(query.doc)) {
+                    data = utils.map(data, function(doc) {
+                        return collection.options.transform(doc, collection);
+                    });
+                } else {
+                    data = collection.options.transform(data, collection);
+                }
             }
-            var models = utils.map(data, function(doc) {
-                return new Model(doc);
-            });
-            deferred.resolve(models);
+
+            deferred.resolve(data);
         },
         error: function(jqXHR, textStatus, errorThrown) {
             deferred.reject(errorThrown);
         }
-    });
+    }));
 
     // TODO: pass deferred to next layer
-    next();
+    return next();
 };
 
-RestStore.prototype.update = function(query, deferred, Model, next) {
-    var queryUri = new QueryURI(this._url);
-    queryUri.collection(query.collectionName).where(query.selector);
+RestStore.prototype.update = function(collection, query, deferred, next) {
+    var queryUri = new QueryURI(this._rootUrl);
+    queryUri.from(query.collectionName).where(query.selector);
 
     if (query.options.multi) {
         queryUri.multi(query.options.multi);
@@ -205,53 +222,61 @@ RestStore.prototype.update = function(query, deferred, Model, next) {
         queryUri.upsert(query.options.upsert);
     }
 
-    $.ajax({
+    $.ajax(utils.extend(this.options, {
         type: 'PATCH',
         url: queryUri.toString(),
         data: JSON.stringify(query.doc),
         success: function(data, textStatus, jqXHR) {
-            if (query.options.lean) {
-                return deferred.resolve(data);
+            if (collection.options.transform && !query.options.lean) {
+                if (query.options.multi) {
+                    data = utils.map(data, function(doc) {
+                        return collection.options.transform(doc, collection);
+                    });
+                } else {
+                    data = collection.options.transform(data, collection);
+                }
             }
-            var models = utils.map(data, function(doc) {
-                return new Model(doc);
-            });
-            deferred.resolve(models);
+
+            deferred.resolve(data);
         },
         error: function(jqXHR, textStatus, errorThrown) {
             deferred.reject(errorThrown);
         }
-    });
+    }));
 
-    next();
+    return next();
 };
 
-RestStore.prototype.remove = function(query, deferred, Model, next) {
-    var queryUri = new QueryURI(this._url);
-    queryUri.collection(query.collectionName).where(query.selector);
+RestStore.prototype.remove = function(collection, query, deferred, next) {
+    var queryUri = new QueryURI(this._rootUrl);
+    queryUri.from(query.collectionName).where(query.selector);
 
-    if (query.options.single) {
-        queryUri.single(query.options.single);
+    if (query.options.multi) {
+        queryUri.multi(query.options.multi);
     }
 
-    $.ajax({
+    $.ajax(utils.extend(this.options, {
         type: 'DELETE',
         url: queryUri.toString(),
         success: function(data, textStatus, jqXHR) {
-            if (query.options.lean) {
-                return deferred.resolve(data);
+            if (collection.options.transform && !query.options.lean) {
+                if (query.options.multi) {
+                    data = utils.map(data, function(doc) {
+                        return collection.options.transform(doc, collection);
+                    });
+                } else {
+                    data = collection.options.transform(data, collection);
+                }
             }
-            var models = utils.map(data, function(doc) {
-                return new Model(doc);
-            });
-            deferred.resolve(models);
+
+            deferred.resolve(data);
         },
         error: function(jqXHR, textStatus, errorThrown) {
             deferred.reject(errorThrown);
         }
-    });
+    }));
 
-    next();
+    return next();
 };
 
 function QueryURI(rootUrl) {
@@ -262,30 +287,33 @@ function QueryURI(rootUrl) {
     this._uri = new URI(rootUrl);
 }
 
-QueryURI.prototype.collection = function(collectionName) {
+QueryURI.prototype.from = function(collectionName) {
+    this._uri.filename(collectionName);
     return this;
 };
 
 QueryURI.prototype.setOp = function(op) {
+    this._uri.addSearch('op', op);
     return this;
 };
 
 QueryURI.prototype.where = function(selector) {
-    if ('undefined' !== typeof selector._id) {
-        //TODO
-    }
+    this._uri.addSearch('selector', JSON.stringify(selector));
     return this;
 };
 
 QueryURI.prototype.skip = function(skip) {
+    this._uri.addSearch('skip', skip);
     return this;
 };
 
 QueryURI.prototype.limit = function(limit) {
+    this._uri.addSearch('limit', limit);
     return this;
 };
 
 QueryURI.prototype.sort = function(sort) {
+    this._uri.addSearch('sort', JSON.stringify(sort));
     return this;
 };
 

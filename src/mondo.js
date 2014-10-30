@@ -1,20 +1,19 @@
 function Mondo(options) {
     if (!(this instanceof Mondo)) {
-        return new Mondo();
+        return new Mondo(options);
     }
 
-    options = options || {};
 
     this._stores = [];
-    this._onError = options.onError;
+    this.options = options || {};
 }
 
 Mondo.version = '<%= pkg.version %>';
 Mondo.Model = Model;
 Mondo.Collection = Collection;
-Mondo.Query = Query;
+Mondo.QueryBuilder = QueryBuilder;
 Mondo.stores = {
-    abstract: AbstractStore,
+    _abstract: AbstractStore,
     localStorage: LocalStorageStore,
     sessionStorage: SessionStorageStore,
     nedb: NeDBStore,
@@ -22,27 +21,42 @@ Mondo.stores = {
     webSQL: WebSQLStore
 };
 
-Mondo.prototype.addStore = function(store) {
+Mondo.prototype.use = function(store) {
     this._stores.push(store);
 };
 
-Mondo.prototype.collection = function(name, Model, options) {
-    // process arguments
-    if ('undefined' === typeof Model) {
-        Model = Mondo.Model;
+Mondo.prototype.unuse = function(storeName) {
+    for (var i = 0, l = this._stores.length; i < l; i++) {
+        if (this._stores[i].name === storeName) {
+            this._stores.splice(i, 1);
+            return true;
+        }
     }
-    var collection = new Collection(this, name, Model, options);
+
+    return false;
+};
+
+Mondo.prototype.collection = function(name, options) {
+    // process arguments
+    if ('string' !== typeof name) {
+        options = name;
+    }
+    var collection = new Collection(this, name, options);
+    utils.forEach(this._stores, function(store) {
+        store.initCollection(collection);
+    });
     return collection;
 };
 
-Mondo.prototype.handle = function(query, deferred, Model, options) {
+Mondo.prototype.handle = function(collection, query, deferred, options) {
     var stores;
 
     options = options || {};
 
+    // Select stores
     if (options.stores) {
         stores = utils.filter(this._stores, function(store) {
-            return options.stores.indexOf(store.name) > -1;
+            return utils.indexOf(options.stores, store.name) > -1;
         });
     } else {
         stores = this._stores;
@@ -50,19 +64,20 @@ Mondo.prototype.handle = function(query, deferred, Model, options) {
 
     var self = this;
     var idx = 0;
-    next();
+
+    return next();
 
     function next(err) {
-        if (err && self._onError) {
-            return self._onError(err);
+        if (err && self.options.onError) {
+            return self.options.onError(err);
         }
 
         var store = stores[idx++];
 
         if (!store) {
-            return deferred.resolve(null);
+            return deferred.resolve(null).promise();
         }
 
-        store.handle(query, deferred, Model, next);
+        return store.handle(collection, query, deferred, next);
     }
 };
