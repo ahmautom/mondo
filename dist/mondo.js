@@ -16,7 +16,130 @@
     }
 
 })(this, function factory(_, $, URI, Datastore) {
-        'use strict';function Collection(mondo, name, options) {
+        'use strict';function utils(obj) {
+    if (obj instanceof utils) {
+        return obj;
+    }
+    if (!(this instanceof utils)) {
+        return new utils(obj);
+    }
+    this._wrapped = obj;
+}
+
+utils.extend = function(obj) {
+    for (var i = 1, l = arguments.length; i < l; i++) {
+        var source = arguments[i];
+        if (source) {
+            for (var prop in source) {
+                obj[prop] = source[prop];
+            }
+        }
+    }
+    return obj;
+};
+
+utils.forEach = function(obj, iterator, context) {
+    var breaker = {};
+
+    if (obj == null) return obj;
+    if (Array.prototype.forEach && obj.forEach === Array.prototype.forEach) {
+        obj.forEach(iterator, context);
+    } else if (obj.length === +obj.length) {
+        for (var i = 0, length = obj.length; i < length; i++) {
+            if (iterator.call(context, obj[i], i, obj) === breaker) return;
+        }
+    } else {
+        var keys = _.keys(obj);
+        for (var i = 0, length = keys.length; i < length; i++) {
+            if (iterator.call(context, obj[keys[i]], keys[i], obj) === breaker) return;
+        }
+    }
+    return obj;
+};
+
+utils.keys = function(obj) {
+    if (!_.isObject(obj)) return [];
+    if (Object.keys) return Object.keys(obj);
+    var keys = [];
+    for (var key in obj) {
+        if (_.has(obj, key)) {
+            keys.push(key);
+        }
+    }
+    return keys;
+};
+
+utils.map = function(obj, iterator, context) {
+    var results = [];
+    if (obj == null) return results;
+    if (Array.prototype.map && obj.map === Array.prototype.map) return obj.map(iterator, context);
+    utils.forEach(obj, function(value, index, list) {
+        results.push(iterator.call(context, value, index, list));
+    });
+    return results;
+};
+
+utils.filter = function(obj, predicate, context) {
+    var results = [];
+    if (obj == null) return results;
+    if (Array.prototype.filter && obj.filter === Array.prototype.filter) return obj.filter(predicate, context);
+    each(obj, function(value, index, list) {
+        if (predicate.call(context, value, index, list)) results.push(value);
+    });
+    return results;
+};
+
+utils.isArray = Array.isArray || function(obj) {
+    return toString.call(obj) == '[object Array]';
+};
+
+utils.indexOf = function(array, item, isSorted) {
+    if (array == null) return -1;
+    var i = 0,
+        length = array.length;
+    if (isSorted) {
+        if (typeof isSorted == 'number') {
+            i = (isSorted < 0 ? Math.max(0, length + isSorted) : isSorted);
+        } else {
+            i = _.sortedIndex(array, item);
+            return array[i] === item ? i : -1;
+        }
+    }
+    if (Array.prototype.indexOf && array.indexOf === Array.prototype.indexOf) return array.indexOf(item, isSorted);
+    for (; i < length; i++)
+        if (array[i] === item) return i;
+    return -1;
+};
+
+utils.isEmpty = function(obj) {
+    if (obj === null) {
+        return true;
+    }
+
+    for (var key in obj) {
+        if (_.has(obj, key)) {
+            return false;
+        }
+    }
+
+    return true;
+};
+
+utils.mixin = function(target, obj) {
+    for (var name in obj) {
+        if (typeof obj[name] === 'function') {
+            var func = target[name] = obj[name];
+            target.prototype[name] = function() {
+                var args = [this._wrapped];
+                Array.prototype.push.apply(args, arguments);
+                return func.apply(this, args);
+            };
+        }
+    }
+};
+
+utils.mixin(utils, utils);
+function Collection(mondo, name, options) {
     if (!(this instanceof Collection)) {
         return new Collection(mondo, name, options);
     }
@@ -31,10 +154,10 @@
 
 // Read operations
 
-Collection.prototype.filter = function(selector, fields, options, callback) {
-    if ('function' == typeof selector) {
-        callback = selector;
-        selector = {};
+Collection.prototype.filter = function(query, fields, options, callback) {
+    if ('function' == typeof query) {
+        callback = query;
+        query = {};
         fields = undefined;
         options = undefined;
     } else if ('function' == typeof fields) {
@@ -49,7 +172,7 @@ Collection.prototype.filter = function(selector, fields, options, callback) {
     options = options || {};
 
     var qb = new QueryBuilder(this._mondo, this, options);
-    qb.from(this.name).filter(selector);
+    qb.from(this.name).filter(query);
 
     if (fields) {
         qb.select(fields);
@@ -68,10 +191,10 @@ Collection.prototype.filter = function(selector, fields, options, callback) {
     return qb;
 };
 
-Collection.prototype.find = function(selector, fields, options, callback) {
-    if ('function' == typeof selector) {
-        callback = selector;
-        selector = {};
+Collection.prototype.find = function(query, fields, options, callback) {
+    if ('function' == typeof query) {
+        callback = query;
+        query = {};
         fields = undefined;
         options = undefined;
     } else if ('function' == typeof fields) {
@@ -86,7 +209,7 @@ Collection.prototype.find = function(selector, fields, options, callback) {
     options = options || {};
 
     var qb = new QueryBuilder(this._mondo, this, options);
-    qb.from(this.name).find(selector);
+    qb.from(this.name).find(query);
 
     if (fields) {
         qb.select(fields);
@@ -105,10 +228,10 @@ Collection.prototype.find = function(selector, fields, options, callback) {
     return qb;
 };
 
-Collection.prototype.count = function(selector, options, callback) {
-    if ('function' == typeof selector) {
-        callback = selector;
-        selector = {};
+Collection.prototype.count = function(query, options, callback) {
+    if ('function' == typeof query) {
+        callback = query;
+        query = {};
         options = undefined;
     } else if ('function' == typeof options) {
         callback = options;
@@ -118,7 +241,7 @@ Collection.prototype.count = function(selector, options, callback) {
     options = options || {};
 
     var qb = new QueryBuilder(this._mondo, this, options);
-    qb.from(this.name).count(selector);
+    qb.from(this.name).count(query);
 
     utils.forEach(['skip', 'limit'], function(method) {
         if (options[method]) {
@@ -207,10 +330,10 @@ Collection.prototype.insert = function(docs, options, callback) {
     return qb;
 };
 
-Collection.prototype.update = function(selector, doc, options, callback) {
-    if ('function' == typeof selector) {
-        callback = selector;
-        selector = {};
+Collection.prototype.update = function(query, doc, options, callback) {
+    if ('function' == typeof query) {
+        callback = query;
+        query = {};
         doc = undefined;
         options = undefined;
     } else if ('function' == typeof doc) {
@@ -225,7 +348,7 @@ Collection.prototype.update = function(selector, doc, options, callback) {
     options = options || {};
 
     var qb = new QueryBuilder(this._mondo, this, options);
-    qb.from(this.name).update(doc).where(selector);
+    qb.from(this.name).update(doc).where(query);
 
     utils.forEach(['upsert', 'multi'], function(method) {
         if (options[method]) {
@@ -240,10 +363,10 @@ Collection.prototype.update = function(selector, doc, options, callback) {
     return qb;
 };
 
-Collection.prototype.remove = function(selector, options, callback) {
-    if ('function' == typeof selector) {
-        callback = selector;
-        selector = {};
+Collection.prototype.remove = function(query, options, callback) {
+    if ('function' == typeof query) {
+        callback = query;
+        query = {};
         options = undefined;
     } else if ('function' == typeof options) {
         callback = options;
@@ -253,7 +376,7 @@ Collection.prototype.remove = function(selector, options, callback) {
     options = options || {};
 
     var qb = new QueryBuilder(this._mondo, this, options);
-    qb.from(this.name).remove(selector);
+    qb.from(this.name).remove(query);
 
     utils.forEach(['single'], function(method) {
         if (options[method]) {
@@ -446,9 +569,10 @@ var methodToProperty = {
     setDoc: 'doc'
 };
 
-util.forEach(Object.keys(methodToProperty), function(key) {
+utils.forEach(Object.keys(methodToProperty), function(key) {
     QueryBuilder.prototype[key] = function(value) {
         this._query[methodToProperty[key]] = value;
+        return this;
     };
 });
 
@@ -537,115 +661,6 @@ QueryBuilder.prototype.distinct = function(query) {
     this.where(query);
     return this;
 };
-function utils(obj) {
-    if (obj instanceof utils) {
-        return obj;
-    }
-    if (!(this instanceof utils)) {
-        return new utils(obj);
-    }
-    this._wrapped = obj;
-}
-
-utils.extend = function(obj) {
-    for (var i = 1, l = arguments.length; i < l; i++) {
-        var source = arguments[i];
-        if (source) {
-            for (var prop in source) {
-                obj[prop] = source[prop];
-            }
-        }
-    }
-    return obj;
-};
-
-utils.forEach = function(obj, iterator, context) {
-    var breaker = {};
-
-    if (obj == null) return obj;
-    if (Array.prototype.forEach && obj.forEach === Array.prototype.forEach) {
-        obj.forEach(iterator, context);
-    } else if (obj.length === +obj.length) {
-        for (var i = 0, length = obj.length; i < length; i++) {
-            if (iterator.call(context, obj[i], i, obj) === breaker) return;
-        }
-    } else {
-        var keys = _.keys(obj);
-        for (var i = 0, length = keys.length; i < length; i++) {
-            if (iterator.call(context, obj[keys[i]], keys[i], obj) === breaker) return;
-        }
-    }
-    return obj;
-};
-
-utils.keys = function(obj) {
-    if (!_.isObject(obj)) return [];
-    if (Object.keys) return Object.keys(obj);
-    var keys = [];
-    for (var key in obj) {
-        if (_.has(obj, key)) {
-            keys.push(key);
-        }
-    }
-    return keys;
-};
-
-utils.map = function(obj, iterator, context) {
-    var results = [];
-    if (obj == null) return results;
-    if (Array.prototype.map && obj.map === Array.prototype.map) return obj.map(iterator, context);
-    utils.forEach(obj, function(value, index, list) {
-        results.push(iterator.call(context, value, index, list));
-    });
-    return results;
-};
-
-utils.filter = function(obj, predicate, context) {
-    var results = [];
-    if (obj == null) return results;
-    if (Array.prototype.filter && obj.filter === Array.prototype.filter) return obj.filter(predicate, context);
-    each(obj, function(value, index, list) {
-        if (predicate.call(context, value, index, list)) results.push(value);
-    });
-    return results;
-};
-
-utils.isArray = Array.isArray || function(obj) {
-    return toString.call(obj) == '[object Array]';
-};
-
-utils.indexOf = function(array, item, isSorted) {
-    if (array == null) return -1;
-    var i = 0,
-        length = array.length;
-    if (isSorted) {
-        if (typeof isSorted == 'number') {
-            i = (isSorted < 0 ? Math.max(0, length + isSorted) : isSorted);
-        } else {
-            i = _.sortedIndex(array, item);
-            return array[i] === item ? i : -1;
-        }
-    }
-    if (Array.prototype.indexOf && array.indexOf === Array.prototype.indexOf) return array.indexOf(item, isSorted);
-    for (; i < length; i++)
-        if (array[i] === item) return i;
-    return -1;
-};
-
-utils.mixin = function(target, obj) {
-    for (var name in obj) {
-        if (typeof obj[name] === 'function') {
-            var func = target[name] = obj[name];
-            target.prototype[name] = function() {
-                var args = [this._wrapped];
-                Array.prototype.push.apply(args, arguments);
-                return func.apply(this, args);
-            };
-        }
-    }
-};
-
-utils.mixin(utils, utils);
 function AbstractStore(name, options) {
     if (!(this instanceof AbstractStore)) {
         return new AbstractStore(name);
@@ -820,7 +835,7 @@ RestStore.prototype.constructor = RestStore;
 
 RestStore.prototype.filter = function(collection, query, deferred, next) {
     var queryUri = new QueryURI(this._rootUrl);
-    queryUri.from(query.collectionName).where(query.selector);
+    queryUri.from(query.collectionName).where(query.query);
 
     if (query.fields) {
         queryUri.select(query.fields);
@@ -865,7 +880,7 @@ RestStore.prototype.filter = function(collection, query, deferred, next) {
 
 RestStore.prototype.find = function(collection, query, deferred, next) {
     var queryUri = new QueryURI(this._rootUrl);
-    queryUri.from(query.collectionName).setOp('find').where(query.selector);
+    queryUri.from(query.collectionName).setOp('find').where(query.query);
 
     if (query.fields) {
         queryUri.select(query.fields);
@@ -903,7 +918,7 @@ RestStore.prototype.find = function(collection, query, deferred, next) {
 
 RestStore.prototype.count = function(collection, query, deferred, next) {
     var queryUri = new QueryURI(this._rootUrl);
-    queryUri.from(query.collectionName).setOp('count').where(query.selector);
+    queryUri.from(query.collectionName).setOp('count').where(query.query);
 
     if (query.options.skip) {
         queryUri.skip(query.options.skip);
@@ -929,7 +944,7 @@ RestStore.prototype.count = function(collection, query, deferred, next) {
 
 RestStore.prototype.mapReduce = function(collection, query, deferred, next) {
     var queryUri = new QueryURI(this._rootUrl);
-    queryUri.from(query.collectionName).setOp('map_reduce').map(query.map).reduce(query.reduce).where(query.selector);
+    queryUri.from(query.collectionName).setOp('map_reduce').map(query.map).reduce(query.reduce).where(query.query);
 
     if (query.options.sort) {
         queryUri.sort(query.options.sort);
@@ -1009,7 +1024,7 @@ RestStore.prototype.insert = function(collection, query, deferred, next) {
 
 RestStore.prototype.update = function(collection, query, deferred, next) {
     var queryUri = new QueryURI(this._rootUrl);
-    queryUri.from(query.collectionName).where(query.selector);
+    queryUri.from(query.collectionName).where(query.query);
 
     if (query.options.multi) {
         queryUri.multi(query.options.multi);
@@ -1046,7 +1061,7 @@ RestStore.prototype.update = function(collection, query, deferred, next) {
 
 RestStore.prototype.remove = function(collection, query, deferred, next) {
     var queryUri = new QueryURI(this._rootUrl);
-    queryUri.from(query.collectionName).where(query.selector);
+    queryUri.from(query.collectionName).where(query.query);
 
     if (query.options.multi) {
         queryUri.multi(query.options.multi);
@@ -1090,12 +1105,16 @@ QueryURI.prototype.from = function(collectionName) {
 };
 
 QueryURI.prototype.setOp = function(op) {
-    this._uri.addSearch('op', op);
+    if (op !== 'find') {
+        this._uri.addSearch('op', op);
+    }
     return this;
 };
 
-QueryURI.prototype.where = function(selector) {
-    this._uri.addSearch('selector', JSON.stringify(selector));
+QueryURI.prototype.where = function(query) {
+    if (!utils.isEmpty(query)) {
+        this._uri.addSearch('query', JSON.stringify(query));
+    }
     return this;
 };
 

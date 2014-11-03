@@ -13,10 +13,10 @@ function Collection(mondo, name, options) {
 
 // Read operations
 
-Collection.prototype.filter = function(selector, fields, options, callback) {
-    if ('function' == typeof selector) {
-        callback = selector;
-        selector = {};
+Collection.prototype.filter = function(query, fields, options, callback) {
+    if ('function' == typeof query) {
+        callback = query;
+        query = {};
         fields = undefined;
         options = undefined;
     } else if ('function' == typeof fields) {
@@ -31,7 +31,7 @@ Collection.prototype.filter = function(selector, fields, options, callback) {
     options = options || {};
 
     var qb = new QueryBuilder(this._mondo, this, options);
-    qb.from(this.name).filter(selector);
+    qb.from(this.name).filter(query);
 
     if (fields) {
         qb.select(fields);
@@ -50,10 +50,10 @@ Collection.prototype.filter = function(selector, fields, options, callback) {
     return qb;
 };
 
-Collection.prototype.find = function(selector, fields, options, callback) {
-    if ('function' == typeof selector) {
-        callback = selector;
-        selector = {};
+Collection.prototype.find = function(query, fields, options, callback) {
+    if ('function' == typeof query) {
+        callback = query;
+        query = {};
         fields = undefined;
         options = undefined;
     } else if ('function' == typeof fields) {
@@ -68,7 +68,7 @@ Collection.prototype.find = function(selector, fields, options, callback) {
     options = options || {};
 
     var qb = new QueryBuilder(this._mondo, this, options);
-    qb.from(this.name).find(selector);
+    qb.from(this.name).find(query);
 
     if (fields) {
         qb.select(fields);
@@ -87,10 +87,10 @@ Collection.prototype.find = function(selector, fields, options, callback) {
     return qb;
 };
 
-Collection.prototype.count = function(selector, options, callback) {
-    if ('function' == typeof selector) {
-        callback = selector;
-        selector = {};
+Collection.prototype.count = function(query, options, callback) {
+    if ('function' == typeof query) {
+        callback = query;
+        query = {};
         options = undefined;
     } else if ('function' == typeof options) {
         callback = options;
@@ -100,7 +100,7 @@ Collection.prototype.count = function(selector, options, callback) {
     options = options || {};
 
     var qb = new QueryBuilder(this._mondo, this, options);
-    qb.from(this.name).count(selector);
+    qb.from(this.name).count(query);
 
     utils.forEach(['skip', 'limit'], function(method) {
         if (options[method]) {
@@ -189,10 +189,10 @@ Collection.prototype.insert = function(docs, options, callback) {
     return qb;
 };
 
-Collection.prototype.update = function(selector, doc, options, callback) {
-    if ('function' == typeof selector) {
-        callback = selector;
-        selector = {};
+Collection.prototype.update = function(query, doc, options, callback) {
+    if ('function' == typeof query) {
+        callback = query;
+        query = {};
         doc = undefined;
         options = undefined;
     } else if ('function' == typeof doc) {
@@ -207,7 +207,7 @@ Collection.prototype.update = function(selector, doc, options, callback) {
     options = options || {};
 
     var qb = new QueryBuilder(this._mondo, this, options);
-    qb.from(this.name).update(doc).where(selector);
+    qb.from(this.name).update(doc).where(query);
 
     utils.forEach(['upsert', 'multi'], function(method) {
         if (options[method]) {
@@ -222,10 +222,10 @@ Collection.prototype.update = function(selector, doc, options, callback) {
     return qb;
 };
 
-Collection.prototype.remove = function(selector, options, callback) {
-    if ('function' == typeof selector) {
-        callback = selector;
-        selector = {};
+Collection.prototype.remove = function(query, options, callback) {
+    if ('function' == typeof query) {
+        callback = query;
+        query = {};
         options = undefined;
     } else if ('function' == typeof options) {
         callback = options;
@@ -235,7 +235,7 @@ Collection.prototype.remove = function(selector, options, callback) {
     options = options || {};
 
     var qb = new QueryBuilder(this._mondo, this, options);
-    qb.from(this.name).remove(selector);
+    qb.from(this.name).remove(query);
 
     utils.forEach(['single'], function(method) {
         if (options[method]) {

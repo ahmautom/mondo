@@ -23,7 +23,7 @@ RestStore.prototype.constructor = RestStore;
 
 RestStore.prototype.filter = function(collection, query, deferred, next) {
     var queryUri = new QueryURI(this._rootUrl);
-    queryUri.from(query.collectionName).where(query.selector);
+    queryUri.from(query.collectionName).where(query.query);
 
     if (query.fields) {
         queryUri.select(query.fields);
@@ -68,7 +68,7 @@ RestStore.prototype.filter = function(collection, query, deferred, next) {
 
 RestStore.prototype.find = function(collection, query, deferred, next) {
     var queryUri = new QueryURI(this._rootUrl);
-    queryUri.from(query.collectionName).setOp('find').where(query.selector);
+    queryUri.from(query.collectionName).setOp('find').where(query.query);
 
     if (query.fields) {
         queryUri.select(query.fields);
@@ -106,7 +106,7 @@ RestStore.prototype.find = function(collection, query, deferred, next) {
 
 RestStore.prototype.count = function(collection, query, deferred, next) {
     var queryUri = new QueryURI(this._rootUrl);
-    queryUri.from(query.collectionName).setOp('count').where(query.selector);
+    queryUri.from(query.collectionName).setOp('count').where(query.query);
 
     if (query.options.skip) {
         queryUri.skip(query.options.skip);
@@ -132,7 +132,7 @@ RestStore.prototype.count = function(collection, query, deferred, next) {
 
 RestStore.prototype.mapReduce = function(collection, query, deferred, next) {
     var queryUri = new QueryURI(this._rootUrl);
-    queryUri.from(query.collectionName).setOp('map_reduce').map(query.map).reduce(query.reduce).where(query.selector);
+    queryUri.from(query.collectionName).setOp('map_reduce').map(query.map).reduce(query.reduce).where(query.query);
 
     if (query.options.sort) {
         queryUri.sort(query.options.sort);
@@ -212,7 +212,7 @@ RestStore.prototype.insert = function(collection, query, deferred, next) {
 
 RestStore.prototype.update = function(collection, query, deferred, next) {
     var queryUri = new QueryURI(this._rootUrl);
-    queryUri.from(query.collectionName).where(query.selector);
+    queryUri.from(query.collectionName).where(query.query);
 
     if (query.options.multi) {
         queryUri.multi(query.options.multi);
@@ -249,7 +249,7 @@ RestStore.prototype.update = function(collection, query, deferred, next) {
 
 RestStore.prototype.remove = function(collection, query, deferred, next) {
     var queryUri = new QueryURI(this._rootUrl);
-    queryUri.from(query.collectionName).where(query.selector);
+    queryUri.from(query.collectionName).where(query.query);
 
     if (query.options.multi) {
         queryUri.multi(query.options.multi);
@@ -293,12 +293,16 @@ QueryURI.prototype.from = function(collectionName) {
 };
 
 QueryURI.prototype.setOp = function(op) {
-    this._uri.addSearch('op', op);
+    if (op !== 'find') {
+        this._uri.addSearch('op', op);
+    }
     return this;
 };
 
-QueryURI.prototype.where = function(selector) {
-    this._uri.addSearch('selector', JSON.stringify(selector));
+QueryURI.prototype.where = function(query) {
+    if (!utils.isEmpty(query)) {
+        this._uri.addSearch('query', JSON.stringify(query));
+    }
     return this;
 };
 

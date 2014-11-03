@@ -2,12 +2,12 @@ module.exports = function(grunt) {
     'use strict';
 
     var sources = [
+        'src/utils.js',
         'src/collection.js',
         'src/model.js',
         'src/mondo.js',
         'src/query.js',
         'src/querybuilder.js',
-        'src/utils.js',
         'src/stores/abstract.js',
         'src/stores/abstractwebstorage.js',
         'src/stores/indexeddb.js',

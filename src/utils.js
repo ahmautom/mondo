@@ -93,6 +93,20 @@ utils.indexOf = function(array, item, isSorted) {
     return -1;
 };
 
+utils.isEmpty = function(obj) {
+    if (obj === null) {
+        return true;
+    }
+
+    for (var key in obj) {
+        if (_.has(obj, key)) {
+            return false;
+        }
+    }
+
+    return true;
+};
+
 utils.mixin = function(target, obj) {
     for (var name in obj) {
         if (typeof obj[name] === 'function') {

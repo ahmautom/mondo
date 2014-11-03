@@ -22,9 +22,10 @@ var methodToProperty = {
     setDoc: 'doc'
 };
 
-util.forEach(Object.keys(methodToProperty), function(key) {
+utils.forEach(Object.keys(methodToProperty), function(key) {
     QueryBuilder.prototype[key] = function(value) {
         this._query[methodToProperty[key]] = value;
+        return this;
     };
 });
 
