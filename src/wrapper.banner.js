@@ -2,7 +2,7 @@
     'use strict';
 
     if (typeof define === 'function' && define.amd) {
-        define(['underscore', 'jquery', 'URIjs/URI', 'nedb'], function(_, $, URI, Datastore) {
+        define('mondo', ['underscore', 'jquery', 'URIjs/URI', 'nedb'], function(_, $, URI, Datastore) {
             return factory(_, $, URI, Datastore);
         });
     } else if (typeof exports !== 'undefined') {
