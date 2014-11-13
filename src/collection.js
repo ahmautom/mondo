@@ -11,6 +11,37 @@ function Collection(mondo, name, options) {
     // TODO: process options
 }
 
+Collection.prototype.op = function(op, data, options, callback) {
+    if ('function' == typeof op) {
+        callback = op;
+        op = {};
+        data = undefined;
+        options = {};
+    } else if ('function' == typeof data) {
+        callback = data;
+        data = undefined;
+        options = {};
+    } else if ('function' == typeof options) {
+        callback = options;
+        options = {};
+    }
+
+    var qb = new QueryBuilder(this._mondo, this, options);
+    qb.from(this.name).setCommand(op).setDoc(data);
+
+    utils.forEach(['sort', 'skip', 'limit', 'lean'], function(method) {
+        if (options[method]) {
+            qb[method](options[method]);
+        }
+    });
+
+    if (callback) {
+        qb.exec(callback);
+    }
+
+    return qb;
+};
+
 // Read operations
 
 Collection.prototype.filter = function(query, fields, options, callback) {
@@ -18,14 +49,14 @@ Collection.prototype.filter = function(query, fields, options, callback) {
         callback = query;
         query = {};
         fields = undefined;
-        options = undefined;
+        options = {};
     } else if ('function' == typeof fields) {
         callback = fields;
         fields = undefined;
-        options = undefined;
+        options = {};
     } else if ('function' == typeof options) {
         callback = options;
-        options = undefined;
+        options = {};
     }
 
     options = options || {};
@@ -55,14 +86,14 @@ Collection.prototype.find = function(query, fields, options, callback) {
         callback = query;
         query = {};
         fields = undefined;
-        options = undefined;
+        options = {};
     } else if ('function' == typeof fields) {
         callback = fields;
         fields = undefined;
-        options = undefined;
+        options = {};
     } else if ('function' == typeof options) {
         callback = options;
-        options = undefined;
+        options = {};
     }
 
     options = options || {};
@@ -91,10 +122,10 @@ Collection.prototype.count = function(query, options, callback) {
     if ('function' == typeof query) {
         callback = query;
         query = {};
-        options = undefined;
+        options = {};
     } else if ('function' == typeof options) {
         callback = options;
-        options = undefined;
+        options = {};
     }
 
     options = options || {};
@@ -119,10 +150,10 @@ Collection.prototype.distinct = function(key, fields, options, callback) {
     if ('function' == typeof fields) {
         callback = fields;
         fields = undefined;
-        options = undefined;
+        options = {};
     } else if ('function' == typeof options) {
         callback = options;
-        options = undefined;
+        options = {};
     }
 
     options = options || {};
@@ -150,7 +181,7 @@ Collection.prototype.distinct = function(key, fields, options, callback) {
 Collection.prototype.mapReduce = function(map, reduce, options, callback) {
     if ('function' == typeof options) {
         callback = options;
-        options = undefined;
+        options = {};
     }
 
     var qb = new QueryBuilder(this._mondo, this, options);
@@ -174,7 +205,7 @@ Collection.prototype.mapReduce = function(map, reduce, options, callback) {
 Collection.prototype.insert = function(docs, options, callback) {
     if ('function' == typeof options) {
         callback = options;
-        options = undefined;
+        options = {};
     }
 
     options = options || {};
@@ -194,14 +225,14 @@ Collection.prototype.update = function(query, doc, options, callback) {
         callback = query;
         query = {};
         doc = undefined;
-        options = undefined;
+        options = {};
     } else if ('function' == typeof doc) {
         callback = doc;
         doc = undefined;
-        options = undefined;
+        options = {};
     } else if ('function' == typeof options) {
         callback = options;
-        options = undefined;
+        options = {};
     }
 
     options = options || {};
@@ -226,10 +257,10 @@ Collection.prototype.remove = function(query, options, callback) {
     if ('function' == typeof query) {
         callback = query;
         query = {};
-        options = undefined;
+        options = {};
     } else if ('function' == typeof options) {
         callback = options;
-        options = undefined;
+        options = {};
     }
 
     options = options || {};

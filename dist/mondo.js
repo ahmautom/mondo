@@ -2,7 +2,7 @@
     'use strict';
 
     if (typeof define === 'function' && define.amd) {
-        define(['underscore', 'jquery', 'URIjs/URI', 'nedb'], function(_, $, URI, Datastore) {
+        define('mondo', ['underscore', 'jquery', 'URIjs/URI', 'nedb'], function(_, $, URI, Datastore) {
             return factory(_, $, URI, Datastore);
         });
     } else if (typeof exports !== 'undefined') {
@@ -152,6 +152,37 @@ function Collection(mondo, name, options) {
     // TODO: process options
 }
 
+Collection.prototype.op = function(op, data, options, callback) {
+    if ('function' == typeof op) {
+        callback = op;
+        op = {};
+        data = undefined;
+        options = {};
+    } else if ('function' == typeof data) {
+        callback = data;
+        data = undefined;
+        options = {};
+    } else if ('function' == typeof options) {
+        callback = options;
+        options = {};
+    }
+
+    var qb = new QueryBuilder(this._mondo, this, options);
+    qb.from(this.name).setCommand(op).setDoc(data);
+
+    utils.forEach(['sort', 'skip', 'limit', 'lean'], function(method) {
+        if (options[method]) {
+            qb[method](options[method]);
+        }
+    });
+
+    if (callback) {
+        qb.exec(callback);
+    }
+
+    return qb;
+};
+
 // Read operations
 
 Collection.prototype.filter = function(query, fields, options, callback) {
@@ -159,14 +190,14 @@ Collection.prototype.filter = function(query, fields, options, callback) {
         callback = query;
         query = {};
         fields = undefined;
-        options = undefined;
+        options = {};
     } else if ('function' == typeof fields) {
         callback = fields;
         fields = undefined;
-        options = undefined;
+        options = {};
     } else if ('function' == typeof options) {
         callback = options;
-        options = undefined;
+        options = {};
     }
 
     options = options || {};
@@ -196,14 +227,14 @@ Collection.prototype.find = function(query, fields, options, callback) {
         callback = query;
         query = {};
         fields = undefined;
-        options = undefined;
+        options = {};
     } else if ('function' == typeof fields) {
         callback = fields;
         fields = undefined;
-        options = undefined;
+        options = {};
     } else if ('function' == typeof options) {
         callback = options;
-        options = undefined;
+        options = {};
     }
 
     options = options || {};
@@ -232,10 +263,10 @@ Collection.prototype.count = function(query, options, callback) {
     if ('function' == typeof query) {
         callback = query;
         query = {};
-        options = undefined;
+        options = {};
     } else if ('function' == typeof options) {
         callback = options;
-        options = undefined;
+        options = {};
     }
 
     options = options || {};
@@ -260,10 +291,10 @@ Collection.prototype.distinct = function(key, fields, options, callback) {
     if ('function' == typeof fields) {
         callback = fields;
         fields = undefined;
-        options = undefined;
+        options = {};
     } else if ('function' == typeof options) {
         callback = options;
-        options = undefined;
+        options = {};
     }
 
     options = options || {};
@@ -291,7 +322,7 @@ Collection.prototype.distinct = function(key, fields, options, callback) {
 Collection.prototype.mapReduce = function(map, reduce, options, callback) {
     if ('function' == typeof options) {
         callback = options;
-        options = undefined;
+        options = {};
     }
 
     var qb = new QueryBuilder(this._mondo, this, options);
@@ -315,7 +346,7 @@ Collection.prototype.mapReduce = function(map, reduce, options, callback) {
 Collection.prototype.insert = function(docs, options, callback) {
     if ('function' == typeof options) {
         callback = options;
-        options = undefined;
+        options = {};
     }
 
     options = options || {};
@@ -335,14 +366,14 @@ Collection.prototype.update = function(query, doc, options, callback) {
         callback = query;
         query = {};
         doc = undefined;
-        options = undefined;
+        options = {};
     } else if ('function' == typeof doc) {
         callback = doc;
         doc = undefined;
-        options = undefined;
+        options = {};
     } else if ('function' == typeof options) {
         callback = options;
-        options = undefined;
+        options = {};
     }
 
     options = options || {};
@@ -367,10 +398,10 @@ Collection.prototype.remove = function(query, options, callback) {
     if ('function' == typeof query) {
         callback = query;
         query = {};
-        options = undefined;
+        options = {};
     } else if ('function' == typeof options) {
         callback = options;
-        options = undefined;
+        options = {};
     }
 
     options = options || {};
@@ -904,6 +935,46 @@ RestStore.prototype.find = function(collection, query, deferred, next) {
         success: function(data, textStatus, jqXHR) {
             if (collection.options.transform && !query.options.lean) {
                 data = collection.options.transform(data, collection);
+            }
+
+            deferred.resolve(data);
+        },
+        error: function(jqXHR, textStatus, errorThrown) {
+            deferred.reject(errorThrown);
+        }
+    }));
+
+    return deferred.promise();
+};
+
+RestStore.prototype.getEdge = function(collection, query, deferred, next) {
+    var queryUri = new QueryURI(this._rootUrl);
+    queryUri.from(query.collectionName + '/' + query.doc.id + '/' + query.doc.path);
+
+    if (query.fields) {
+        queryUri.select(query.fields);
+    }
+
+    if (query.options.sort) {
+        queryUri.sort(query.options.sort);
+    }
+
+    if (query.options.skip) {
+        queryUri.skip(query.options.skip);
+    }
+
+    if (query.options.limit) {
+        queryUri.limit(query.options.limit);
+    }
+
+    $.ajax(utils.extend(this.options, {
+        type: 'GET',
+        url: queryUri.toString(),
+        success: function(data, textStatus, jqXHR) {
+            if (collection.options.transform && !query.options.lean) {
+                data = utils.map(data, function(doc) {
+                    return collection.options.transform(doc, collection);
+                });
             }
 
             deferred.resolve(data);
