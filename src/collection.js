@@ -11,37 +11,6 @@ function Collection(mondo, name, options) {
     // TODO: process options
 }
 
-Collection.prototype.op = function(op, data, options, callback) {
-    if ('function' == typeof op) {
-        callback = op;
-        op = {};
-        data = undefined;
-        options = {};
-    } else if ('function' == typeof data) {
-        callback = data;
-        data = undefined;
-        options = {};
-    } else if ('function' == typeof options) {
-        callback = options;
-        options = {};
-    }
-
-    var qb = new QueryBuilder(this._mondo, this, options);
-    qb.from(this.name).setCommand(op).setDoc(data);
-
-    utils.forEach(['sort', 'skip', 'limit', 'lean'], function(method) {
-        if (options[method]) {
-            qb[method](options[method]);
-        }
-    });
-
-    if (callback) {
-        qb.exec(callback);
-    }
-
-    return qb;
-};
-
 // Read operations
 
 Collection.prototype.filter = function(query, fields, options, callback) {

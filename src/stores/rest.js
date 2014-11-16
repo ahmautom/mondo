@@ -104,46 +104,6 @@ RestStore.prototype.find = function(collection, query, deferred, next) {
     return deferred.promise();
 };
 
-RestStore.prototype.getEdge = function(collection, query, deferred, next) {
-    var queryUri = new QueryURI(this._rootUrl);
-    queryUri.from(query.collectionName + '/' + query.doc.id + '/' + query.doc.path);
-
-    if (query.fields) {
-        queryUri.select(query.fields);
-    }
-
-    if (query.options.sort) {
-        queryUri.sort(query.options.sort);
-    }
-
-    if (query.options.skip) {
-        queryUri.skip(query.options.skip);
-    }
-
-    if (query.options.limit) {
-        queryUri.limit(query.options.limit);
-    }
-
-    $.ajax(utils.extend(this.options, {
-        type: 'GET',
-        url: queryUri.toString(),
-        success: function(data, textStatus, jqXHR) {
-            if (collection.options.transform && !query.options.lean) {
-                data = utils.map(data, function(doc) {
-                    return collection.options.transform(doc, collection);
-                });
-            }
-
-            deferred.resolve(data);
-        },
-        error: function(jqXHR, textStatus, errorThrown) {
-            deferred.reject(errorThrown);
-        }
-    }));
-
-    return deferred.promise();
-};
-
 RestStore.prototype.count = function(collection, query, deferred, next) {
     var queryUri = new QueryURI(this._rootUrl);
     queryUri.from(query.collectionName).setOp('count').where(query.query);
