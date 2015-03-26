@@ -52,8 +52,7 @@ QueryBuilder.prototype.toQuery = function() {
 };
 
 QueryBuilder.prototype.exec = function(callback) {
-    var deferred = $.Deferred();
-    var promise = this._mondo.handle(this._collection, this._query, deferred, this._options);
+    var promise = this._mondo.handle(this._collection, this._query, this._options);
     if (callback) {
         promise.then(function() {
             callback.apply(null, [null].concat([].slice.call(arguments, 0)));

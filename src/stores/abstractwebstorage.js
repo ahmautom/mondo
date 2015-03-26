@@ -33,19 +33,15 @@ AbstractWebStorageStore.prototype._save = function(collectionName, array) {
 
 // Read
 
-AbstractWebStorageStore.prototype.filter = function(collection, query, deferred, next) {
-    var array = this._get(query.collectionName);
-    var docs = array;
+AbstractWebStorageStore.prototype.filter = function(collection, query, next) {
+    var docs = this._get(query.collectionName); 
+    return Q.Promise(function(resolve, reject, notify) {
+        if (options.transform && !query.options.lean) {
+            resolve(utils.map(docs, options.transform));
+        }
 
-    if (options.transform && !query.options.lean) {
-        var models = utils.map(docs, options.transform);
-    }
-
-    setTimeout(function() {
-        deferred.resolve(models);
-    }, 0);
-
-    return deferred.promise();
+        resolve(docs);
+    });
 };
 
 // Write

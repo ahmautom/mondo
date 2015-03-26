@@ -48,7 +48,7 @@ Mondo.prototype.collection = function(name, options) {
     return collection;
 };
 
-Mondo.prototype.handle = function(collection, query, deferred, options) {
+Mondo.prototype.handle = function(collection, query, options) {
     var stores;
 
     options = options || {};
@@ -75,9 +75,11 @@ Mondo.prototype.handle = function(collection, query, deferred, options) {
         var store = stores[idx++];
 
         if (!store) {
-            return deferred.resolve(null).promise();
+            var deferred = Q.defer();
+            deferred.resolve(null);
+            return deferred.promise;
         }
 
-        return store.handle(collection, query, deferred, next);
+        return store.handle(collection, query, next);
     }
 };
